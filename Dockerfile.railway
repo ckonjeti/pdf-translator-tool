@@ -1,0 +1,42 @@
+# Use Node.js 18 as base image
+FROM node:18-alpine
+
+# Install basic build tools
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    build-base \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy the Railway-specific package.json (without canvas)
+COPY package.json.railway ./package.json
+COPY client/package*.json ./client/
+
+# Clear npm cache and set npm config
+RUN npm cache clean --force
+RUN npm config set registry https://registry.npmjs.org/
+
+# Install server dependencies
+RUN npm install --legacy-peer-deps --verbose --no-optional
+
+# Install client dependencies
+RUN cd client && npm install --legacy-peer-deps --verbose --no-optional
+
+# Copy source code
+COPY . .
+
+# Build the React app
+RUN npm run build
+
+# Create uploads directory
+RUN mkdir -p uploads/images
+
+# Expose port
+EXPOSE 5000
+
+# Start the application
+CMD ["npm", "start"] 

@@ -30,11 +30,18 @@ WORKDIR /app
 COPY package*.json ./
 COPY client/package*.json ./client/
 
-# Install server dependencies with verbose output
-RUN npm install --legacy-peer-deps --verbose || (echo "Server npm install failed" && exit 1)
+# Clear npm cache and set npm config
+RUN npm cache clean --force
+RUN npm config set registry https://registry.npmjs.org/
+
+# Install server dependencies with better error handling
+RUN npm install --legacy-peer-deps --verbose --no-optional || \
+    (echo "Server npm install failed, trying without canvas..." && \
+     npm uninstall canvas && \
+     npm install --legacy-peer-deps --verbose --no-optional)
 
 # Install client dependencies with verbose output
-RUN cd client && npm install --legacy-peer-deps --verbose || (echo "Client npm install failed" && exit 1)
+RUN cd client && npm install --legacy-peer-deps --verbose --no-optional || (echo "Client npm install failed" && exit 1)
 
 # Copy source code
 COPY . .
