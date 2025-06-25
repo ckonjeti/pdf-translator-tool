@@ -5,6 +5,7 @@
 ### 1. Prepare Your Repository
 - Ensure all changes are committed to GitHub
 - Make sure your `.env` file is in `.gitignore` (it should be)
+- The build scripts have been fixed to handle client dependencies properly
 
 ### 2. Deploy to Railway
 1. Go to [railway.app](https://railway.app)
@@ -24,6 +25,11 @@ In Railway dashboard:
 ### 4. Deploy
 1. Railway will automatically build and deploy your app
 2. Wait for deployment to complete (usually 2-5 minutes)
+3. The build process will:
+   - Install server dependencies
+   - Install client dependencies
+   - Build the React app
+   - Start the server
 
 ### 5. Connect Your Domain
 1. In Railway dashboard, go to "Settings" → "Domains"
@@ -48,7 +54,19 @@ In Railway dashboard:
 5. Add environment variables
 6. Deploy and connect domain
 
+## Docker Deployment (Advanced)
+
+If your platform supports Docker:
+
+1. The `Dockerfile` is already configured
+2. Build Command: `docker build -t sanskrit-translator .`
+3. Start Command: `docker run -p 5000:5000 sanskrit-translator`
+
 ## Troubleshooting
+
+### Build Issues Fixed:
+- ✅ **react-scripts not found**: Fixed by ensuring client dependencies are installed before build
+- ✅ **Build order**: Server dependencies → Client dependencies → React build → Start server
 
 ### Common Issues:
 - **Build fails**: Check that all dependencies are in `package.json`
@@ -64,6 +82,8 @@ In Railway dashboard:
 ├── server.js (main server file)
 ├── package.json (with all dependencies)
 ├── Procfile (for deployment)
+├── Dockerfile (for Docker deployment)
+├── .dockerignore (optimizes Docker build)
 ├── client/ (React frontend)
 │   ├── package.json
 │   ├── src/
@@ -80,4 +100,5 @@ In Railway dashboard:
 If you encounter issues:
 1. Check the deployment platform's logs
 2. Ensure all environment variables are set
-3. Verify your OpenAI API key is valid and has credits 
+3. Verify your OpenAI API key is valid and has credits
+4. The build process now properly handles client dependencies 
