@@ -15,15 +15,12 @@ RUN apk add --no-cache \
     automake \
     pkgconfig \
     pixman-dev \
-    pkgconfig \
     build-base \
     libpng-dev \
     freetype-dev \
     fontconfig-dev \
-    pkgconfig \
     ttf-dejavu \
     ttf-liberation \
-    ttf-ubuntu-font-family \
     && rm -rf /var/cache/apk/*
 
 # Set working directory
