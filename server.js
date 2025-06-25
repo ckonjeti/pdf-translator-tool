@@ -262,9 +262,9 @@ PRESERVATION RULES FOR SANSKRIT TEXT:
     const prompt = `Provide a literal, line-by-line English translation of the following ${sourceLang} text. Do not transliterate from Devanagari to the Latin script; provide the English meaning.
 
 IMPORTANT INSTRUCTIONS:
-1. Translate EVERY SINGLE LINE to its English meaning.
+1. Translate EVERY SINGLE SENTENCE to its English meaning.
 2. Do not provide summaries or paraphrases.
-3. Do not combine multiple lines into one.
+3. Do not combine multiple sentences into one.
 4. Preserve the exact line structure and formatting.
 5. If a line is a mix of ${sourceLang} and English, translate the ${sourceLang} parts and keep the English parts.
 6. If a line is already entirely in English, keep it as is.
