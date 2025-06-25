@@ -69,11 +69,22 @@ docker build -f Dockerfile.ubuntu -t sanskrit-translator .
 docker run -p 5000:5000 sanskrit-translator
 ```
 
+### Option 3: Simple Build (Troubleshooting)
+If you're having npm install issues, try the simplified version:
+```bash
+# Copy the simple package.json
+cp package.json.simple package.json
+# Build with simple Dockerfile
+docker build -f Dockerfile.simple -t sanskrit-translator .
+docker run -p 5000:5000 sanskrit-translator
+```
+
 ### Docker Build Issues Fixed:
 - ✅ **Native dependencies**: Added system packages for canvas, tesseract.js
 - ✅ **Build tools**: Included python3, make, g++, etc.
 - ✅ **Font support**: Added font packages for OCR
 - ✅ **Legacy peer deps**: Added `--legacy-peer-deps` flag for compatibility
+- ✅ **Verbose output**: Added `--verbose` flag to see detailed npm install logs
 
 ## Troubleshooting
 
@@ -82,12 +93,14 @@ docker run -p 5000:5000 sanskrit-translator
 - ✅ **Build order**: Server dependencies → Client dependencies → React build → Start server
 - ✅ **Native module compilation**: Added system dependencies for canvas and tesseract.js
 - ✅ **Docker build failures**: Created alternative Dockerfile with Ubuntu base
+- ✅ **npm install failures**: Added verbose logging and error handling
 
 ### Common Issues:
 - **Build fails**: Check that all dependencies are in `package.json`
 - **App crashes**: Check environment variables are set correctly
 - **Domain not working**: Wait for DNS propagation (can take 24-48 hours)
 - **Docker build fails**: Try the Ubuntu Dockerfile (`Dockerfile.ubuntu`)
+- **npm install fails**: Try the simple version without canvas (`package.json.simple`)
 
 ### Environment Variables Required:
 - `OPENAI_API_KEY`: Your OpenAI API key
@@ -97,9 +110,11 @@ docker run -p 5000:5000 sanskrit-translator
 ```
 ├── server.js (main server file)
 ├── package.json (with all dependencies)
+├── package.json.simple (without canvas for testing)
 ├── Procfile (for deployment)
 ├── Dockerfile (Alpine Linux version)
 ├── Dockerfile.ubuntu (Ubuntu version)
+├── Dockerfile.simple (minimal dependencies)
 ├── .dockerignore (optimizes Docker build)
 ├── client/ (React frontend)
 │   ├── package.json
@@ -119,4 +134,5 @@ If you encounter issues:
 2. Ensure all environment variables are set
 3. Verify your OpenAI API key is valid and has credits
 4. The build process now properly handles client dependencies
-5. For Docker issues, try the Ubuntu Dockerfile 
+5. For Docker issues, try the Ubuntu Dockerfile
+6. For npm install issues, try the simple package.json without canvas 

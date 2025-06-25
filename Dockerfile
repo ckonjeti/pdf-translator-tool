@@ -30,9 +30,11 @@ WORKDIR /app
 COPY package*.json ./
 COPY client/package*.json ./client/
 
-# Install dependencies with legacy peer deps flag
-RUN npm install --legacy-peer-deps
-RUN cd client && npm install --legacy-peer-deps
+# Install server dependencies with verbose output
+RUN npm install --legacy-peer-deps --verbose || (echo "Server npm install failed" && exit 1)
+
+# Install client dependencies with verbose output
+RUN cd client && npm install --legacy-peer-deps --verbose || (echo "Client npm install failed" && exit 1)
 
 # Copy source code
 COPY . .
