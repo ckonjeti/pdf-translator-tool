@@ -56,22 +56,38 @@ In Railway dashboard:
 
 ## Docker Deployment (Advanced)
 
-If your platform supports Docker:
+### Option 1: Alpine Linux (Faster, Smaller)
+```bash
+docker build -t sanskrit-translator .
+docker run -p 5000:5000 sanskrit-translator
+```
 
-1. The `Dockerfile` is already configured
-2. Build Command: `docker build -t sanskrit-translator .`
-3. Start Command: `docker run -p 5000:5000 sanskrit-translator`
+### Option 2: Ubuntu Base (More Compatible)
+If Alpine build fails, use the Ubuntu version:
+```bash
+docker build -f Dockerfile.ubuntu -t sanskrit-translator .
+docker run -p 5000:5000 sanskrit-translator
+```
+
+### Docker Build Issues Fixed:
+- ✅ **Native dependencies**: Added system packages for canvas, tesseract.js
+- ✅ **Build tools**: Included python3, make, g++, etc.
+- ✅ **Font support**: Added font packages for OCR
+- ✅ **Legacy peer deps**: Added `--legacy-peer-deps` flag for compatibility
 
 ## Troubleshooting
 
 ### Build Issues Fixed:
 - ✅ **react-scripts not found**: Fixed by ensuring client dependencies are installed before build
 - ✅ **Build order**: Server dependencies → Client dependencies → React build → Start server
+- ✅ **Native module compilation**: Added system dependencies for canvas and tesseract.js
+- ✅ **Docker build failures**: Created alternative Dockerfile with Ubuntu base
 
 ### Common Issues:
 - **Build fails**: Check that all dependencies are in `package.json`
 - **App crashes**: Check environment variables are set correctly
 - **Domain not working**: Wait for DNS propagation (can take 24-48 hours)
+- **Docker build fails**: Try the Ubuntu Dockerfile (`Dockerfile.ubuntu`)
 
 ### Environment Variables Required:
 - `OPENAI_API_KEY`: Your OpenAI API key
@@ -82,7 +98,8 @@ If your platform supports Docker:
 ├── server.js (main server file)
 ├── package.json (with all dependencies)
 ├── Procfile (for deployment)
-├── Dockerfile (for Docker deployment)
+├── Dockerfile (Alpine Linux version)
+├── Dockerfile.ubuntu (Ubuntu version)
 ├── .dockerignore (optimizes Docker build)
 ├── client/ (React frontend)
 │   ├── package.json
@@ -101,4 +118,5 @@ If you encounter issues:
 1. Check the deployment platform's logs
 2. Ensure all environment variables are set
 3. Verify your OpenAI API key is valid and has credits
-4. The build process now properly handles client dependencies 
+4. The build process now properly handles client dependencies
+5. For Docker issues, try the Ubuntu Dockerfile 

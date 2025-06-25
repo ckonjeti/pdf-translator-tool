@@ -1,5 +1,30 @@
-# Use Node.js 18 as base image
+# Use Node.js 18 as base image with build tools
 FROM node:18-alpine
+
+# Install system dependencies for canvas and other native modules
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    jpeg-dev \
+    cairo-dev \
+    giflib-dev \
+    pango-dev \
+    libtool \
+    autoconf \
+    automake \
+    pkgconfig \
+    pixman-dev \
+    pkgconfig \
+    build-base \
+    libpng-dev \
+    freetype-dev \
+    fontconfig-dev \
+    pkgconfig \
+    ttf-dejavu \
+    ttf-liberation \
+    ttf-ubuntu-font-family \
+    && rm -rf /var/cache/apk/*
 
 # Set working directory
 WORKDIR /app
@@ -8,15 +33,18 @@ WORKDIR /app
 COPY package*.json ./
 COPY client/package*.json ./client/
 
-# Install dependencies
-RUN npm install
-RUN cd client && npm install
+# Install dependencies with legacy peer deps flag
+RUN npm install --legacy-peer-deps
+RUN cd client && npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
 
 # Build the React app
 RUN npm run build
+
+# Create uploads directory
+RUN mkdir -p uploads/images
 
 # Expose port
 EXPOSE 5000
