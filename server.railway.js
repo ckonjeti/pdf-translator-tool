@@ -24,10 +24,16 @@ const PORT = process.env.PORT || 5000;
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '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'
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-console.log('Loaded OpenAI Key:', process.env.OPENAI_API_KEY);
+// Validate API key exists
+if (!process.env.OPENAI_API_KEY) {
+  console.error('ERROR: OPENAI_API_KEY environment variable is not set!');
+  console.log('Please set your OpenAI API key in the environment variables or .env file');
+} else {
+  console.log('OpenAI API key loaded successfully');
+}
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker.entry');

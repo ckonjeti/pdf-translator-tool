@@ -1,7 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import * as pdfjsLib from 'pdfjs-dist';
+import io from 'socket.io-client';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
+import { saveAs } from 'file-saver';
 import './App.css';
 
 // Set up PDF.js worker
@@ -19,9 +22,43 @@ function PdfTab({ label, uploadEndpoint }) {
   const [progressUpdates, setProgressUpdates] = useState([]);
   const [editingTranslations, setEditingTranslations] = useState({});
   const [editableTranslations, setEditableTranslations] = useState({});
+  const [editingTranslationOnly, setEditingTranslationOnly] = useState({});
+  const [editableTranslationOnly, setEditableTranslationOnly] = useState({});
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [isRedoing, setIsRedoing] = useState(null);
   const [redoError, setRedoError] = useState(null);
+  const [currentProgress, setCurrentProgress] = useState({ step: 0, total: 100, message: '' });
+  const socketRef = useRef(null);
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    const serverUrl = process.env.NODE_ENV === 'production' ? window.location.origin : 'http://localhost:5000';
+    socketRef.current = io(serverUrl);
+    
+    socketRef.current.on('connect', () => {
+      console.log('Connected to WebSocket server:', socketRef.current.id);
+    });
+
+    socketRef.current.on('progress', (progressData) => {
+      console.log('Progress update:', progressData);
+      setCurrentProgress({
+        step: progressData.step || 0,
+        total: progressData.total || 100,
+        message: progressData.message || ''
+      });
+      setProgressUpdates(prev => [...prev, progressData]);
+    });
+
+    socketRef.current.on('disconnect', () => {
+      console.log('Disconnected from WebSocket server');
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
 
   const onDrop = useCallback(async (acceptedFiles) => {
     const file = acceptedFiles[0];
@@ -40,9 +77,12 @@ function PdfTab({ label, uploadEndpoint }) {
     setOcrPages([]);
     setEditingTranslations({});
     setEditableTranslations({});
+    setEditingTranslationOnly({});
+    setEditableTranslationOnly({});
     setCurrentPageIndex(0);
     setTotalPages(0);
     setPageRanges('');
+    setCurrentProgress({ step: 0, total: 100, message: '' });
     setSelectedFile(file);
 
     // Get page count from PDF
@@ -63,17 +103,21 @@ function PdfTab({ label, uploadEndpoint }) {
   }, []);
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !socketRef.current) return;
 
     setLoading(true);
     setError('');
     setSuccess('');
     setProgressUpdates([]);
     setOcrPages([]);
+    setEditingTranslationOnly({});
+    setEditableTranslationOnly({});
+    setCurrentProgress({ step: 0, total: 100, message: 'Starting upload...' });
 
     const formData = new FormData();
     formData.append('pdf', selectedFile);
     formData.append('pageRanges', pageRanges);
+    formData.append('socketId', socketRef.current.id);
 
     try {
       const response = await axios.post(uploadEndpoint, formData, {
@@ -85,10 +129,13 @@ function PdfTab({ label, uploadEndpoint }) {
         setProgressUpdates(response.data.progress || []);
         
         const initialEditableTranslations = {};
+        const initialEditableTranslationOnly = {};
         (response.data.pages || []).forEach((page, index) => {
           initialEditableTranslations[index] = page.translation || '';
+          initialEditableTranslationOnly[index] = page.translation || '';
         });
         setEditableTranslations(initialEditableTranslations);
+        setEditableTranslationOnly(initialEditableTranslationOnly);
       } else {
         setError(response.data.message || 'Processing failed.');
       }
@@ -125,6 +172,12 @@ function PdfTab({ label, uploadEndpoint }) {
 
         // Update the editable state if it exists
         setEditableTranslations(prev => ({
+          ...prev,
+          [pageIndex]: newTranslation
+        }));
+
+        // Update the translation-only editable state
+        setEditableTranslationOnly(prev => ({
           ...prev,
           [pageIndex]: newTranslation
         }));
@@ -312,21 +365,207 @@ function PdfTab({ label, uploadEndpoint }) {
     setEditableTranslations(prev => ({ ...prev, [pageIndex]: value }));
   };
 
-  const exportTranslations = () => {
-    const content = ocrPages.map((page, index) => {
-      const translation = editableTranslations[index] || page.translation || 'Translation not available.';
-      return `Page ${page.page}:\n${translation}\n\n`;
-    }).join('---\n\n');
+  const startEditingTranslationOnly = (pageIndex) => {
+    setEditingTranslationOnly(prev => ({ ...prev, [pageIndex]: true }));
+    setEditableTranslationOnly(prev => ({ 
+      ...prev, 
+      [pageIndex]: ocrPages[pageIndex].translation || '' 
+    }));
+  };
+
+  const saveTranslationOnly = (pageIndex) => {
+    setEditingTranslationOnly(prev => ({ ...prev, [pageIndex]: false }));
     
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${label.toLowerCase()}_translations.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Update the ocrPages with the new translation
+    setOcrPages(prev => prev.map((page, index) => 
+      index === pageIndex 
+        ? { ...page, translation: editableTranslationOnly[pageIndex] || '' }
+        : page
+    ));
+
+    // Also update the combined editable translations
+    setEditableTranslations(prev => ({
+      ...prev,
+      [pageIndex]: editableTranslationOnly[pageIndex] || ''
+    }));
+  };
+
+  const cancelEditingTranslationOnly = (pageIndex) => {
+    setEditingTranslationOnly(prev => ({ ...prev, [pageIndex]: false }));
+    setEditableTranslationOnly(prev => ({ 
+      ...prev, 
+      [pageIndex]: ocrPages[pageIndex].translation || '' 
+    }));
+  };
+
+  const handleTranslationOnlyChange = (pageIndex, value) => {
+    setEditableTranslationOnly(prev => ({ ...prev, [pageIndex]: value }));
+  };
+
+  const exportTranslations = async () => {
+    try {
+      console.log('Starting Word document export...');
+      
+      // Create document structure for Word export
+      const children = [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `${label} PDF Translations`,
+              bold: true,
+              size: 32,
+            }),
+          ],
+          spacing: { after: 400 },
+        })
+      ];
+
+      // Add each page's content
+      ocrPages.forEach((page, index) => {
+        const translation = editableTranslationOnly[index] || editableTranslations[index] || page.translation || 'Translation not available.';
+        const extractedText = page.text || 'No text extracted.';
+        
+        // Page header
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Page ${page.page}`,
+                bold: true,
+              }),
+            ],
+            spacing: { before: 400, after: 200 },
+          })
+        );
+
+        // Original text section
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Original Text:",
+                bold: true,
+              }),
+            ],
+            spacing: { before: 200, after: 100 },
+          })
+        );
+
+        // Add original text
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: extractedText,
+              }),
+            ],
+            spacing: { after: 200 },
+          })
+        );
+
+        // Translation section
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Translation:",
+                bold: true,
+              }),
+            ],
+            spacing: { before: 200, after: 100 },
+          })
+        );
+
+        // Add translation
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: translation,
+              }),
+            ],
+            spacing: { after: 300 },
+          })
+        );
+      });
+
+      console.log('Creating document...');
+      
+      // Create the document
+      const doc = new Document({
+        sections: [
+          {
+            children: children,
+          },
+        ],
+      });
+
+      console.log('Generating blob...');
+      
+      // Generate and download the Word document using toBlob for browser compatibility
+      const blob = await Packer.toBlob(doc);
+      
+      console.log('Blob created successfully...');
+      
+      console.log('Downloading file...');
+      
+      // Use file-saver for better browser compatibility
+      saveAs(blob, `${label.toLowerCase()}_translations.docx`);
+
+      console.log('Word document exported successfully!');
+
+    } catch (error) {
+      console.error('Error creating Word document:', error);
+      console.error('Error details:', error.stack);
+      
+      // Try a different approach with better error handling
+      if (error.message.includes('nodebuffer') || error.message.includes('buffer')) {
+        console.log('Buffer issue detected, trying alternative export method...');
+        
+        try {
+          // Alternative: Create a simpler RTF document which can be opened by Word
+          const rtfContent = generateRTFContent();
+          const rtfBlob = new Blob([rtfContent], { type: 'application/rtf' });
+          saveAs(rtfBlob, `${label.toLowerCase()}_translations.rtf`);
+          console.log('RTF document exported successfully!');
+          return;
+        } catch (rtfError) {
+          console.error('RTF export also failed:', rtfError);
+        }
+      }
+      
+      alert('Error creating Word document: ' + error.message + '. Falling back to text file.');
+      
+      // Fallback to text export if Word export fails
+      const content = ocrPages.map((page, index) => {
+        const translation = editableTranslationOnly[index] || editableTranslations[index] || page.translation || 'Translation not available.';
+        return `Page ${page.page}:\n\nOriginal Text:\n${page.text || 'No text extracted.'}\n\nTranslation:\n${translation}\n\n${'='.repeat(50)}\n\n`;
+      }).join('');
+      
+      const textBlob = new Blob([content], { type: 'text/plain' });
+      saveAs(textBlob, `${label.toLowerCase()}_translations.txt`);
+    }
+    
+    // Helper function to generate RTF content
+    function generateRTFContent() {
+      let rtf = '{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;} {\\f1 Arial;}}';
+      rtf += '\\f0\\fs28\\b ' + label + ' PDF Translations\\b0\\fs24\\par\\par';
+      
+      ocrPages.forEach((page, index) => {
+        const translation = editableTranslationOnly[index] || editableTranslations[index] || page.translation || 'Translation not available.';
+        const extractedText = page.text || 'No text extracted.';
+        
+        rtf += '\\b\\fs26 Page ' + page.page + '\\b0\\fs24\\par\\par';
+        rtf += '\\b Original Text:\\b0\\par';
+        rtf += extractedText.replace(/\n/g, '\\par ') + '\\par\\par';
+        rtf += '\\b Translation:\\b0\\par';
+        rtf += translation.replace(/\n/g, '\\par ') + '\\par\\par';
+        rtf += '\\line\\line';
+      });
+      
+      rtf += '}';
+      return rtf;
+    }
   };
 
   const goToNextPage = () => {
@@ -388,6 +627,22 @@ function PdfTab({ label, uploadEndpoint }) {
           <div className="loading">
             <div className="spinner"></div>
             <span>Processing PDF with OCR and translation...</span>
+            <div className="progress-container">
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${(currentProgress.step / currentProgress.total) * 100}%` }}
+                ></div>
+              </div>
+              <div className="progress-text">
+                {currentProgress.message && (
+                  <div className="progress-current">{currentProgress.message}</div>
+                )}
+                <div className="progress-percentage">
+                  {Math.round((currentProgress.step / currentProgress.total) * 100)}%
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -470,7 +725,7 @@ function PdfTab({ label, uploadEndpoint }) {
                 fontWeight: 'bold'
               }}
             >
-              📥 Export Translations
+              📄 Export to Word
             </button>
           </div>
 
@@ -599,13 +854,12 @@ function PdfTab({ label, uploadEndpoint }) {
                 width: '100%'
               }}>
                 
-                {/* Image Column */}
+                {/* Image Column - Left Side (No Container) */}
                 <div style={{
-                  flex: '1.5',
+                  flex: '1',
                   display: 'flex',
                   justifyContent: 'center',
-                  alignItems: 'center',
-                  height: '85vh',
+                  alignItems: 'flex-start',
                   minWidth: 0
                 }}>
                   <img 
@@ -614,7 +868,7 @@ function PdfTab({ label, uploadEndpoint }) {
                     onClick={() => openImageInModal(ocrPages[currentPageIndex].imagePath)}
                     style={{ 
                       maxWidth: '100%', 
-                      maxHeight: '100%',
+                      maxHeight: '85vh',
                       borderRadius: '10px',
                       boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
                       objectFit: 'contain',
@@ -623,98 +877,77 @@ function PdfTab({ label, uploadEndpoint }) {
                   />
                 </div>
                 
-                {/* Combined Text and Translation Column */}
+                {/* Text and Translation Column - Right Side */}
                 <div style={{
                   flex: '1',
-                  background: '#f8f9fa', 
-                  padding: '20px', 
-                  borderRadius: '10px', 
-                  border: '1px solid #e9ecef',
-                  height: '85vh',
                   display: 'flex',
                   flexDirection: 'column',
-                  overflow: 'hidden'
+                  gap: '20px',
+                  minWidth: 0
                 }}>
-                  <h4 style={{ 
-                    margin: '0 0 10px 0', 
-                    color: '#495057',
-                    borderBottom: '2px solid #e9ecef',
-                    paddingBottom: '8px',
-                    fontSize: '16px',
+                  {/* Extracted Text Container */}
+                  <div style={{
+                    background: '#f8f9fa',
+                    padding: '20px',
+                    borderRadius: '10px',
+                    border: '1px solid #e9ecef',
+                    flex: '1',
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
+                    flexDirection: 'column',
+                    overflow: 'hidden'
                   }}>
-                    <span>📝 Extracted Text:</span>
-                    <div className="edit-buttons">
-                      {editingTranslations[currentPageIndex] ? (
-                        <>
-                          <button onClick={() => saveTranslation(currentPageIndex)}>Save</button>
-                          <button onClick={() => cancelEditingTranslation(currentPageIndex)}>Cancel</button>
-                        </>
-                      ) : (
-                        <button onClick={() => startEditingTranslation(currentPageIndex)}>Edit</button>
-                      )}
-                    </div>
-                  </h4>
-                  <div style={{ 
-                    flex: '1',
-                    overflowY: 'auto',
-                    padding: '10px',
-                    background: 'white',
-                    borderRadius: '5px',
-                    border: '1px solid #dee2e6',
-                    marginBottom: '15px'
-                  }}>
-                    {editingTranslations[currentPageIndex] ? (
-                      <textarea
-                        value={editableTranslations[currentPageIndex] || ''}
-                        onChange={(e) => handleTranslationChange(currentPageIndex, e.target.value)}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          padding: '10px',
-                          border: '2px solid #bee5eb',
-                          borderRadius: '5px',
-                          fontSize: '11px',
-                          fontFamily: 'monospace',
-                          resize: 'none',
-                          background: 'white',
-                          lineHeight: '1.4'
-                        }}
-                        placeholder="Edit extracted text here..."
-                      />
-                    ) : (
-                      <div style={{
-                        fontSize: '11px',
-                        lineHeight: '1.4',
-                        fontFamily: 'monospace',
-                        whiteSpace: 'pre-wrap'
-                      }}>
-                        {ocrPages[currentPageIndex].text || 'No text extracted from this page.'}
+                    <h4 style={{ 
+                      margin: '0 0 15px 0', 
+                      color: '#495057',
+                      borderBottom: '2px solid #e9ecef',
+                      paddingBottom: '8px',
+                      fontSize: '16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>📝 Extracted Text</span>
+                      <div className="edit-buttons">
+                        {editingTranslations[currentPageIndex] ? (
+                          <>
+                            <button onClick={() => saveTranslation(currentPageIndex)} style={{
+                              background: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              padding: '5px 15px',
+                              borderRadius: '5px',
+                              cursor: 'pointer',
+                              marginRight: '5px'
+                            }}>Save</button>
+                            <button onClick={() => cancelEditingTranslation(currentPageIndex)} style={{
+                              background: '#6c757d',
+                              color: 'white',
+                              border: 'none',
+                              padding: '5px 15px',
+                              borderRadius: '5px',
+                              cursor: 'pointer'
+                            }}>Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => startEditingTranslation(currentPageIndex)} style={{
+                            background: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            padding: '5px 15px',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                          }}>Edit</button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  
-                  <h4 style={{ 
-                    margin: '0 0 10px 0', 
-                    color: '#495057',
-                    borderBottom: '2px solid #e9ecef',
-                    paddingBottom: '8px',
-                    fontSize: '16px'
-                  }}>
-                    <span>🌐 Translation:</span>
-                  </h4>
-                  <div style={{ 
-                    flex: '1',
-                    overflowY: 'auto',
-                    padding: '10px',
-                    background: 'white',
-                    borderRadius: '5px',
-                    border: '1px solid #dee2e6'
-                  }}>
-                    <div className="text-container">
-                      <h3>Translation:</h3>
+                    </h4>
+                    <div style={{ 
+                      flex: '1',
+                      overflowY: 'auto',
+                      padding: '15px',
+                      background: 'white',
+                      borderRadius: '5px',
+                      border: '1px solid #dee2e6'
+                    }}>
                       {editingTranslations[currentPageIndex] ? (
                         <textarea
                           value={editableTranslations[currentPageIndex] || ''}
@@ -722,40 +955,153 @@ function PdfTab({ label, uploadEndpoint }) {
                           style={{
                             width: '100%',
                             height: '100%',
-                            padding: '10px',
-                            border: '2px solid #bee5eb',
-                            borderRadius: '5px',
-                            fontSize: '11px',
+                            padding: '0',
+                            border: 'none',
+                            fontSize: '12px',
                             fontFamily: 'monospace',
                             resize: 'none',
                             background: 'white',
-                            lineHeight: '1.4'
+                            lineHeight: '1.4',
+                            outline: 'none'
                           }}
-                          placeholder="Edit extracted text here..."
+                          placeholder="Edit extracted text and translation here..."
                         />
                       ) : (
-                        <pre>{ocrPages[currentPageIndex].translation || 'No translation available.'}</pre>
+                        <div style={{
+                          fontSize: '12px',
+                          lineHeight: '1.4',
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {ocrPages[currentPageIndex].text || 'No text extracted from this page.'}
+                        </div>
                       )}
-                      <div className="edit-buttons">
-                        {editingTranslations[currentPageIndex] ? (
+                    </div>
+                  </div>
+                  
+                  {/* Translation Container */}
+                  <div style={{
+                    background: '#f8f9fa',
+                    padding: '20px',
+                    borderRadius: '10px',
+                    border: '1px solid #e9ecef',
+                    flex: '1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}>
+                    <h4 style={{ 
+                      margin: '0 0 15px 0', 
+                      color: '#495057',
+                      borderBottom: '2px solid #e9ecef',
+                      paddingBottom: '8px',
+                      fontSize: '16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>🌐 Translation</span>
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        {editingTranslationOnly[currentPageIndex] ? (
                           <>
-                            <button onClick={() => saveTranslation(currentPageIndex)}>Save</button>
-                            <button onClick={() => cancelEditingTranslation(currentPageIndex)}>Cancel</button>
+                            <button 
+                              onClick={() => saveTranslationOnly(currentPageIndex)}
+                              style={{
+                                background: '#28a745',
+                                color: 'white',
+                                border: 'none',
+                                padding: '5px 15px',
+                                borderRadius: '5px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Save
+                            </button>
+                            <button 
+                              onClick={() => cancelEditingTranslationOnly(currentPageIndex)}
+                              style={{
+                                background: '#6c757d',
+                                color: 'white',
+                                border: 'none',
+                                padding: '5px 15px',
+                                borderRadius: '5px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Cancel
+                            </button>
                           </>
                         ) : (
                           <>
-                            <button onClick={() => startEditingTranslation(currentPageIndex)}>Edit</button>
+                            <button 
+                              onClick={() => startEditingTranslationOnly(currentPageIndex)}
+                              style={{
+                                background: '#007bff',
+                                color: 'white',
+                                border: 'none',
+                                padding: '5px 15px',
+                                borderRadius: '5px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Edit
+                            </button>
                             <button 
                               onClick={() => handleRedoTranslation(currentPageIndex)}
                               disabled={isRedoing === currentPageIndex}
+                              style={{
+                                background: isRedoing === currentPageIndex ? '#6c757d' : '#ffc107',
+                                color: isRedoing === currentPageIndex ? 'white' : '#212529',
+                                border: 'none',
+                                padding: '5px 15px',
+                                borderRadius: '5px',
+                                cursor: isRedoing === currentPageIndex ? 'not-allowed' : 'pointer'
+                              }}
                             >
                               {isRedoing === currentPageIndex ? 'Redoing...' : 'Redo Translation'}
                             </button>
                           </>
                         )}
                       </div>
-                      {redoError && <p className="error-message">{redoError}</p>}
+                    </h4>
+                    <div style={{ 
+                      flex: '1',
+                      overflowY: 'auto',
+                      padding: '15px',
+                      background: 'white',
+                      borderRadius: '5px',
+                      border: '1px solid #dee2e6'
+                    }}>
+                      {editingTranslationOnly[currentPageIndex] ? (
+                        <textarea
+                          value={editableTranslationOnly[currentPageIndex] || ''}
+                          onChange={(e) => handleTranslationOnlyChange(currentPageIndex, e.target.value)}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            padding: '0',
+                            border: 'none',
+                            fontSize: '12px',
+                            fontFamily: 'Georgia, serif',
+                            resize: 'none',
+                            background: 'white',
+                            lineHeight: '1.4',
+                            outline: 'none'
+                          }}
+                          placeholder="Edit translation here..."
+                        />
+                      ) : (
+                        <div style={{
+                          fontSize: '12px',
+                          lineHeight: '1.4',
+                          fontFamily: 'Georgia, serif',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {ocrPages[currentPageIndex].translation || 'No translation available.'}
+                        </div>
+                      )}
                     </div>
+                    {redoError && <p style={{color: '#dc3545', fontSize: '14px', marginTop: '10px'}}>{redoError}</p>}
                   </div>
                 </div>
               </div>

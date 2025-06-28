@@ -11,13 +11,29 @@ const OpenAI = require('openai');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const http = require('http');
+const socketIo = require('socket.io');
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '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'
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-console.log('Loaded OpenAI Key:', process.env.OPENAI_API_KEY);
+// Validate API key exists
+if (!process.env.OPENAI_API_KEY) {
+  console.error('ERROR: OPENAI_API_KEY environment variable is not set!');
+  console.log('Please set your OpenAI API key in the environment variables or .env file');
+} else {
+  console.log('OpenAI API key loaded successfully');
+}
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker.entry');
@@ -89,7 +105,7 @@ function parsePageRanges(pageRangesStr) {
 async function convertPdfToImages(pdfPath, outputDir, progressCallback, pagesToConvert = null) {
   try {
     console.log('Loading PDF...');
-    progressCallback('Loading PDF document...');
+    progressCallback('Loading PDF document...', 0, 100);
     
     const data = new Uint8Array(await fs.readFile(pdfPath));
     const loadingTask = pdfjsLib.getDocument({ data });
@@ -101,25 +117,42 @@ async function convertPdfToImages(pdfPath, outputDir, progressCallback, pagesToC
       : Array.from({ length: totalPages }, (_, i) => i + 1);
 
     if (pageNumbers.length === 0) {
-      progressCallback('No valid pages selected for conversion.');
+      progressCallback('No valid pages selected for conversion.', 0, 0);
       return [];
     }
     
     console.log('PDF loaded, pages to convert:', pageNumbers);
-    progressCallback(`PDF loaded successfully. Converting ${pageNumbers.length} pages...`);
+    progressCallback(`PDF loaded successfully. Converting ${pageNumbers.length} pages...`, 10, 100);
     
     const images = [];
     
-    for (const pageNum of pageNumbers) {
+    for (let i = 0; i < pageNumbers.length; i++) {
+      const pageNum = pageNumbers[i];
       try {
         console.log(`Processing page ${pageNum}/${totalPages}`);
-        progressCallback(`Converting page ${pageNum} to image...`);
+        const progressPercent = Math.round(10 + (i / pageNumbers.length) * 40); // 10-50% for conversion
+        progressCallback(`Converting page ${pageNum} to image...`, progressPercent, 100);
         
         const page = await pdf.getPage(pageNum);
         
         // Use a fixed high-quality scale (approx. 300 DPI for a standard page)
-        const scale = 4.0;
-        const viewport = page.getViewport({ scale: scale });
+        let scale = 4.0;
+        let viewport = page.getViewport({ scale: scale });
+        
+        // Ensure minimum dimensions for OCR (at least 100x100 pixels)
+        const minWidth = 100;
+        const minHeight = 100;
+        
+        if (viewport.width < minWidth || viewport.height < minHeight) {
+          // Calculate scale to ensure minimum dimensions
+          const scaleForWidth = minWidth / viewport.width;
+          const scaleForHeight = minHeight / viewport.height;
+          scale = Math.max(scale, scaleForWidth, scaleForHeight);
+          viewport = page.getViewport({ scale: scale });
+          console.log(`Adjusted scale to ${scale} for page ${pageNum} to ensure minimum OCR dimensions`);
+        }
+        
+        console.log(`Page ${pageNum} dimensions: ${viewport.width}x${viewport.height} (scale: ${scale})`);
         
         const canvas = createCanvas(viewport.width, viewport.height);
         const context = canvas.getContext('2d');
@@ -142,7 +175,8 @@ async function convertPdfToImages(pdfPath, outputDir, progressCallback, pagesToC
         console.log(`Page ${pageNum} saved as image (${viewport.width}x${viewport.height})`);
       } catch (error) {
          console.error(`Failed to convert page ${pageNum}:`, error);
-         progressCallback(`Failed to convert page ${pageNum} to image`);
+         const progressPercent = Math.round(10 + (i / pageNumbers.length) * 40);
+         progressCallback(`Failed to convert page ${pageNum} to image`, progressPercent, 100);
          // Create a blank image as a fallback
          const blankCanvas = createCanvas(1000, 1000);
          const blankContext = blankCanvas.getContext('2d');
@@ -164,12 +198,12 @@ async function convertPdfToImages(pdfPath, outputDir, progressCallback, pagesToC
     }
     
     console.log('All pages converted to images');
-    progressCallback('All pages converted to images successfully.');
+    progressCallback('All pages converted to images successfully.', 50, 100);
     
     return images;
   } catch (error) {
     console.error('Error converting PDF to images:', error);
-    progressCallback('Error converting PDF to images: ' + error.message);
+    progressCallback('Error converting PDF to images: ' + error.message, 0, 100);
     throw error;
   }
 }
@@ -178,7 +212,7 @@ async function convertPdfToImages(pdfPath, outputDir, progressCallback, pagesToC
 async function extractTextFromImages(imageObjects, language, sendProgress) {
   try {
     console.log('Starting OCR for language:', language);
-    sendProgress(`Starting OCR text extraction for ${imageObjects.length} pages...`);
+    sendProgress(`Starting OCR text extraction for ${imageObjects.length} pages...`, 50, 100);
     
     const worker = await createWorker();
     
@@ -192,7 +226,7 @@ async function extractTextFromImages(imageObjects, language, sendProgress) {
     
     await worker.loadLanguage(lang);
     await worker.initialize(lang);
-    sendProgress(`OCR engine initialized for ${language} language.`);
+    sendProgress(`OCR engine initialized for ${language} language.`, 55, 100);
     
     // Set OCR parameters for better recognition
     await worker.setParameters({
@@ -206,27 +240,62 @@ async function extractTextFromImages(imageObjects, language, sendProgress) {
       const { imagePath, pageNumber } = imageObjects[i];
       const fullImagePath = path.join(__dirname, imagePath.replace('/uploads/', 'uploads/'));
       console.log('Processing OCR for image:', fullImagePath);
-      sendProgress(`Extracting text from page ${pageNumber}...`);
+      const progressPercent = Math.round(55 + (i / imageObjects.length) * 20); // 55-75% for OCR
+      sendProgress(`Extracting text from page ${pageNumber}...`, progressPercent, 100);
       
-      const { data: { text } } = await worker.recognize(fullImagePath);
-      results.push({
-        page: pageNumber,
-        text: text.trim(),
-        imagePath: imagePath
-      });
+      try {
+        // Check if file exists before processing
+        if (!await fs.pathExists(fullImagePath)) {
+          console.warn(`Image file not found: ${fullImagePath}`);
+          results.push({
+            page: pageNumber,
+            text: 'Error: Image file not found',
+            imagePath: imagePath
+          });
+          continue;
+        }
+
+        // Get image stats to check dimensions
+        const stats = await fs.stat(fullImagePath);
+        if (stats.size < 100) { // Less than 100 bytes is likely an invalid image
+          console.warn(`Image file too small: ${fullImagePath} (${stats.size} bytes)`);
+          results.push({
+            page: pageNumber,
+            text: 'Error: Image file too small for OCR processing',
+            imagePath: imagePath
+          });
+          continue;
+        }
+
+        const { data: { text } } = await worker.recognize(fullImagePath);
+        results.push({
+          page: pageNumber,
+          text: text.trim(),
+          imagePath: imagePath
+        });
+        
+        console.log(`OCR completed for page ${pageNumber}`);
+      } catch (ocrError) {
+        console.error(`OCR error for page ${pageNumber}:`, ocrError.message);
+        results.push({
+          page: pageNumber,
+          text: `OCR Error: ${ocrError.message}`,
+          imagePath: imagePath
+        });
+      }
       
-      console.log(`OCR completed for page ${pageNumber}`);
-      sendProgress(`Text extraction completed for page ${pageNumber}.`);
+      const completedPercent = Math.round(55 + ((i + 1) / imageObjects.length) * 20);
+      sendProgress(`Text extraction completed for page ${pageNumber}.`, completedPercent, 100);
     }
     
     await worker.terminate();
     console.log('OCR processing completed');
-    sendProgress(`OCR text extraction completed for all ${imageObjects.length} pages.`);
+    sendProgress(`OCR text extraction completed for all ${imageObjects.length} pages.`, 75, 100);
     
     return results;
   } catch (error) {
     console.error('Error in OCR processing:', error);
-    sendProgress(`Error in OCR processing: ${error.message}`);
+    sendProgress(`Error in OCR processing: ${error.message}`, 50, 100);
     throw error;
   }
 }
@@ -349,16 +418,24 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
     
     const pageRanges = req.body.pageRanges;
     const pagesToProcess = parsePageRanges(pageRanges);
+    const socketId = req.body.socketId; // Get socket ID from request
 
     console.log('Requested page ranges:', pageRanges);
     console.log('Parsed pages to process:', pagesToProcess);
+    console.log('Socket ID:', socketId);
 
-    // Progress tracking function
+    // Progress tracking function with WebSocket emission
     const progressUpdates = [];
-    const sendProgress = (message) => {
+    const sendProgress = (message, step = null, total = null) => {
       const timestamp = new Date().toLocaleTimeString();
-      progressUpdates.push({ timestamp, message });
+      const progressData = { timestamp, message, step, total };
+      progressUpdates.push(progressData);
       console.log(`[${timestamp}] ${message}`);
+      
+      // Emit progress to specific client via WebSocket
+      if (socketId) {
+        io.to(socketId).emit('progress', progressData);
+      }
     };
     
     // Clean previous images
@@ -392,27 +469,29 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
     
     // Translate text using GPT
     console.log('Starting translation processing...');
-    sendProgress('Starting GPT translation for all pages...');
+    sendProgress('Starting GPT translation for all pages...', 75, 100);
     const resultsWithTranslation = [];
     
     for (let i = 0; i < ocrResults.length; i++) {
       const page = ocrResults[i];
-      sendProgress(`Translating page ${page.page}...`);
-      const translation = await translateText(page.text, language, sendProgress);
+      const progressPercent = Math.round(75 + (i / ocrResults.length) * 20); // 75-95% for translation
+      sendProgress(`Translating page ${page.page}...`, progressPercent, 100);
+      const translation = await translateText(page.text, language, (msg) => sendProgress(msg, progressPercent, 100));
       resultsWithTranslation.push({
         ...page,
         translation: translation
       });
-      sendProgress(`Page ${page.page} translation completed.`);
+      const completedPercent = Math.round(75 + ((i + 1) / ocrResults.length) * 20);
+      sendProgress(`Page ${page.page} translation completed.`, completedPercent, 100);
     }
     
     // Clean up the uploaded PDF (no permanent storage)
     console.log('Cleaning up uploaded PDF...');
-    sendProgress('Cleaning up temporary files...');
+    sendProgress('Cleaning up temporary files...', 95, 100);
     await fs.remove(pdfPath);
     
     console.log('Upload, OCR, and translation successful, returning response');
-    sendProgress('All processing completed successfully!');
+    sendProgress('All processing completed successfully!', 100, 100);
     
     res.json({ 
       success: true, 
@@ -462,6 +541,15 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
-app.listen(PORT, () => {
+// WebSocket connection handling
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }); 
