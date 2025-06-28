@@ -1,0 +1,12 @@
+build:
+  commands:
+    - npm ci --legacy-peer-deps
+    - cd client && npm ci --legacy-peer-deps
+    - cd client && npm run build
+
+start:
+  command: node server.railway.simple.js
+
+environment:
+  NODE_ENV: production
+  NPM_CONFIG_PRODUCTION: false

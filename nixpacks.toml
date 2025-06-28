@@ -1,0 +1,19 @@
+[variables]
+NIXPACKS_NODE_VERSION = "18"
+NPM_CONFIG_PRODUCTION = "false"
+
+[phases.setup]
+nixPkgs = ["nodejs_18", "npm"]
+
+[phases.install]
+cmds = ["npm ci --legacy-peer-deps --include=dev"]
+
+[phases.build]
+cmds = [
+  "cd client && npm ci --legacy-peer-deps",
+  "cd client && npm run build",
+  "cd .."
+]
+
+[start]
+cmd = "node server.railway.simple.js"

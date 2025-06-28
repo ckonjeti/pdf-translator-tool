@@ -11,11 +11,9 @@
     "start": "node start.js",
     "dev": "nodemon server.railway.simple.js",
     "client": "cd client && npm start",
-    "build": "cd client && npm run build",
-    "install-client": "cd client && npm install",
-    "railway-build": "npm run install-client && npm run build",
-    "heroku-postbuild": "npm run install-client && npm run build",
-    "postinstall": "npm run install-client && npm run build"
+    "build": "echo 'Build handled by nixpacks.toml'",
+    "install-client": "cd client && npm ci --legacy-peer-deps",
+    "postinstall": "echo 'Installation complete'"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -1,22 +1,13 @@
+# Prevent Railway from auto-generating Dockerfiles
+Dockerfile*
+*.dockerfile
+.dockerignore
+
 # Development files
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-
-# Node modules (will be installed during build)
-node_modules
-client/node_modules
-
-# Build files that will be regenerated
-client/build
-client/dist
-
-# Development tools
-.vscode
-.idea
-*.swp
-*.swo
 
 # Logs
 npm-debug.log*
@@ -24,20 +15,11 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
-# Test files
-**/*.test.js
-**/*.spec.js
-__tests__
-coverage
-
-# Documentation (except deployment docs)
-*.md
-!README.md
-!RAILWAY_DEPLOYMENT.md
-
-# Development scripts
-claude-cli.js
-claude-dev-helper.js
+# Development tools
+.vscode
+.idea
+*.swp
+*.swo
 
 # OS generated files
 .DS_Store
@@ -48,10 +30,6 @@ claude-dev-helper.js
 ehthumbs.db
 Thumbs.db
 
-# Temporary folders
-tmp/
-temp/
-
-# Uploads directory content (structure will be created)
-uploads/*
-!uploads/.gitkeep
+# Documentation
+*.md
+!README.md
