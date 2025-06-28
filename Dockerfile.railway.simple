@@ -1,0 +1,67 @@
+# Simple Railway Dockerfile for Sanskrit Translator
+# Single-stage build optimized for Railway
+
+FROM node:18-alpine
+
+# Install system dependencies including canvas requirements
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    jpeg-dev \
+    cairo-dev \
+    giflib-dev \
+    pango-dev \
+    libtool \
+    autoconf \
+    automake \
+    pkgconfig \
+    pixman-dev \
+    build-base \
+    libpng-dev \
+    freetype-dev \
+    fontconfig-dev \
+    ttf-dejavu \
+    ttf-liberation \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files and install server dependencies
+COPY package.json.railway ./package.json
+RUN npm install --legacy-peer-deps --verbose
+
+# Copy client package files and install client dependencies
+COPY client/package*.json ./client/
+RUN cd client && npm install --legacy-peer-deps --verbose
+
+# Copy all source code
+COPY . .
+
+# Build the React application
+RUN npm run build
+
+# Create necessary directories
+RUN mkdir -p uploads/images
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs
+
+# Change ownership of the app directory
+RUN chown -R nodejs:nodejs /app && \
+    chmod -R 755 /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port (Railway automatically sets PORT environment variable)
+EXPOSE $PORT
+
+# Health check for Railway monitoring
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 5000) + '/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
+
+# Start the application
+CMD ["node", "server.js"]

@@ -33,9 +33,9 @@ WORKDIR /app
 COPY package.json.railway ./package.json
 COPY client/package*.json ./client/
 
-# Install dependencies
-RUN npm ci --legacy-peer-deps
-RUN cd client && npm ci --legacy-peer-deps
+# Install dependencies (use npm install since we're using custom package.json)
+RUN npm install --legacy-peer-deps --no-optional
+RUN cd client && npm install --legacy-peer-deps --no-optional
 
 # Copy source code
 COPY . .
@@ -65,7 +65,7 @@ WORKDIR /app
 
 # Copy package.json and install production dependencies
 COPY package.json.railway ./package.json
-RUN npm ci --only=production --legacy-peer-deps
+RUN npm install --only=production --legacy-peer-deps --no-optional
 
 # Copy built application from builder stage
 COPY --from=builder /app/client/build ./client/build
