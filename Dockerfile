@@ -1,50 +1,29 @@
-# Use Node.js 18 as base image with build tools
+# Railway Deployment - Minimal Dockerfile
 FROM node:18-alpine
-
-# Install system dependencies for canvas and other native modules
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    jpeg-dev \
-    cairo-dev \
-    giflib-dev \
-    pango-dev \
-    libtool \
-    autoconf \
-    automake \
-    pkgconfig \
-    pixman-dev \
-    build-base \
-    libpng-dev \
-    freetype-dev \
-    fontconfig-dev \
-    ttf-dejavu \
-    ttf-liberation \
-    && rm -rf /var/cache/apk/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy Railway-specific package.json (without canvas)
+COPY package.railway.json ./package.json
 COPY client/package*.json ./client/
 
-# Clear npm cache and set npm config
-RUN npm cache clean --force
-RUN npm config set registry https://registry.npmjs.org/
+# Install dependencies without optional packages
+RUN npm install --legacy-peer-deps --no-optional && npm cache clean --force
 
-# Install server dependencies with better error handling
-RUN npm install --legacy-peer-deps --verbose --no-optional || \
-    (echo "Server npm install failed, trying without canvas..." && \
-     npm uninstall canvas && \
-     npm install --legacy-peer-deps --verbose --no-optional)
+# Install client dependencies  
+WORKDIR /app/client
+RUN npm install --legacy-peer-deps --no-optional && npm cache clean --force
 
-# Install client dependencies with verbose output
-RUN cd client && npm install --legacy-peer-deps --verbose --no-optional || (echo "Client npm install failed" && exit 1)
+# Back to app root
+WORKDIR /app
 
-# Copy source code
-COPY . .
+# Copy simplified server file
+COPY server.railway.simple.js ./server.js
+COPY client ./client
+
+# Copy other necessary files
+COPY *.traineddata ./
 
 # Build the React app
 RUN npm run build
@@ -53,7 +32,7 @@ RUN npm run build
 RUN mkdir -p uploads/images
 
 # Expose port
-EXPOSE 5000
+EXPOSE $PORT
 
 # Start the application
-CMD ["npm", "start"] 
+CMD ["node", "server.js"]
