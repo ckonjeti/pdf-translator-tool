@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs-extra');
 const cors = require('cors');
-const { createWorker } = require('tesseract.js');
+// Removed tesseract.js - now using GPT-4 Vision for OCR
 const pdfjsLib = require('pdfjs-dist');
 const { createCanvas } = require('canvas');
 const OpenAI = require('openai');
@@ -208,40 +208,30 @@ async function convertPdfToImages(pdfPath, outputDir, progressCallback, pagesToC
   }
 }
 
-// OCR function to extract text from images
+// GPT-4 Vision OCR function to extract text from images
 async function extractTextFromImages(imageObjects, language, sendProgress) {
   try {
-    console.log('Starting OCR for language:', language);
-    sendProgress(`Starting OCR text extraction for ${imageObjects.length} pages...`, 50, 100);
+    console.log('Starting GPT-4 Vision OCR for language:', language);
+    sendProgress(`Starting GPT-4 Vision text extraction for ${imageObjects.length} pages...`, 50, 100);
     
-    const worker = await createWorker();
-    
-    // Set language based on tab
-    let lang = 'eng'; // default
+    // Define language-specific prompts (neutral, academic language)
+    let languagePrompt = '';
     if (language === 'hindi') {
-      lang = 'hin+eng'; // Hindi + English
+      languagePrompt = 'This is an academic document containing Hindi text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.';
     } else if (language === 'sanskrit') {
-      lang = 'san+eng'; // Sanskrit + English
+      languagePrompt = 'This is an academic document containing Sanskrit text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.';
+    } else {
+      languagePrompt = 'This is an academic document containing text. Please perform optical character recognition to extract all visible text accurately.';
     }
-    
-    await worker.loadLanguage(lang);
-    await worker.initialize(lang);
-    sendProgress(`OCR engine initialized for ${language} language.`, 55, 100);
-    
-    // Set OCR parameters for better recognition
-    await worker.setParameters({
-      preserve_interword_spaces: '1',
-      tessedit_pageseg_mode: '6', // Assume uniform block of text
-    });
     
     const results = [];
     
     for (let i = 0; i < imageObjects.length; i++) {
       const { imagePath, pageNumber } = imageObjects[i];
       const fullImagePath = path.join(__dirname, imagePath.replace('/uploads/', 'uploads/'));
-      console.log('Processing OCR for image:', fullImagePath);
+      console.log('Processing GPT-4 Vision OCR for image:', fullImagePath);
       const progressPercent = Math.round(55 + (i / imageObjects.length) * 20); // 55-75% for OCR
-      sendProgress(`Extracting text from page ${pageNumber}...`, progressPercent, 100);
+      sendProgress(`Extracting text from page ${pageNumber} using GPT-4 Vision...`, progressPercent, 100);
       
       try {
         // Check if file exists before processing
@@ -255,7 +245,7 @@ async function extractTextFromImages(imageObjects, language, sendProgress) {
           continue;
         }
 
-        // Get image stats to check dimensions
+        // Get image stats to check file size
         const stats = await fs.stat(fullImagePath);
         if (stats.size < 100) { // Less than 100 bytes is likely an invalid image
           console.warn(`Image file too small: ${fullImagePath} (${stats.size} bytes)`);
@@ -267,16 +257,86 @@ async function extractTextFromImages(imageObjects, language, sendProgress) {
           continue;
         }
 
-        const { data: { text } } = await worker.recognize(fullImagePath);
-        results.push({
-          page: pageNumber,
-          text: text.trim(),
-          imagePath: imagePath
+        // Read image file and convert to base64
+        const imageBuffer = await fs.readFile(fullImagePath);
+        const base64Image = imageBuffer.toString('base64');
+
+        // Use GPT-4 Vision for OCR
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o", // Latest model with vision capabilities
+          messages: [{
+            role: "user",
+            content: [
+              { 
+                type: "text", 
+                text: `${languagePrompt}
+
+INSTRUCTIONS FOR TEXT EXTRACTION:
+1. Identify and transcribe every character, word, and line visible in the document
+2. Preserve the original formatting, line breaks, and spacing exactly as shown
+3. Transcribe the text as-is without any translation or interpretation
+4. For Devanagari script, maintain all diacritical marks and characters precisely
+5. Include all numbers, punctuation marks, and symbols present
+6. For multi-column layouts, transcribe from left to right, top to bottom
+7. Provide only the transcribed text without additional commentary
+8. If the image contains no readable text, respond with "No text detected"`
+              },
+              { 
+                type: "image_url", 
+                image_url: { url: `data:image/png;base64,${base64Image}` }
+              }
+            ]
+          }],
+          max_tokens: 2000,
+          temperature: 0.1 // Low temperature for consistent OCR results
         });
+
+        const extractedText = response.choices[0].message.content.trim();
         
-        console.log(`OCR completed for page ${pageNumber}`);
+        // Handle content moderation responses
+        if (extractedText.toLowerCase().includes("sorry, i can't assist") || 
+            extractedText.toLowerCase().includes("i cannot help") ||
+            extractedText.toLowerCase().includes("unable to process")) {
+          console.warn(`Content moderation triggered for page ${pageNumber}, retrying with different approach...`);
+          // Fallback: simpler prompt
+          const fallbackResponse = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [{
+              role: "user",
+              content: [
+                { 
+                  type: "text", 
+                  text: "Please transcribe all visible text from this academic document image."
+                },
+                { 
+                  type: "image_url", 
+                  image_url: { url: `data:image/png;base64,${base64Image}` }
+                }
+              ]
+            }],
+            max_tokens: 2000,
+            temperature: 0.1
+          });
+          
+          const fallbackText = fallbackResponse.choices[0].message.content.trim();
+          results.push({
+            page: pageNumber,
+            text: fallbackText.toLowerCase().includes("sorry") ? 
+                  `OCR processing restricted for page ${pageNumber}. Please try a different image.` : 
+                  fallbackText,
+            imagePath: imagePath
+          });
+        } else {
+          results.push({
+            page: pageNumber,
+            text: extractedText,
+            imagePath: imagePath
+          });
+        }
+        
+        console.log(`GPT-4 Vision OCR completed for page ${pageNumber}`);
       } catch (ocrError) {
-        console.error(`OCR error for page ${pageNumber}:`, ocrError.message);
+        console.error(`GPT-4 Vision OCR error for page ${pageNumber}:`, ocrError.message);
         results.push({
           page: pageNumber,
           text: `OCR Error: ${ocrError.message}`,
@@ -285,17 +345,16 @@ async function extractTextFromImages(imageObjects, language, sendProgress) {
       }
       
       const completedPercent = Math.round(55 + ((i + 1) / imageObjects.length) * 20);
-      sendProgress(`Text extraction completed for page ${pageNumber}.`, completedPercent, 100);
+      sendProgress(`GPT-4 Vision text extraction completed for page ${pageNumber}.`, completedPercent, 100);
     }
     
-    await worker.terminate();
-    console.log('OCR processing completed');
-    sendProgress(`OCR text extraction completed for all ${imageObjects.length} pages.`, 75, 100);
+    console.log('GPT-4 Vision OCR processing completed');
+    sendProgress(`GPT-4 Vision text extraction completed for all ${imageObjects.length} pages.`, 75, 100);
     
     return results;
   } catch (error) {
-    console.error('Error in OCR processing:', error);
-    sendProgress(`Error in OCR processing: ${error.message}`, 50, 100);
+    console.error('Error in GPT-4 Vision OCR processing:', error);
+    sendProgress(`Error in GPT-4 Vision OCR processing: ${error.message}`, 50, 100);
     throw error;
   }
 }
@@ -313,46 +372,44 @@ async function translateText(text, sourceLanguage, sendProgress) {
     if (sourceLanguage === 'hindi') {
       sourceLang = 'Hindi';
       preserveInstructions = `
-PRESERVATION RULES FOR HINDI TEXT:
-- Keep all Sanskrit words/phrases UNTRANSLATED (write them as-is)
-- Sanskrit words often appear in Devanagari script or transliterated form
-- Common Sanskrit words to preserve: mantras, philosophical terms, names, etc.
-- If you're unsure if a word is Sanskrit, preserve it to be safe`;
+ACADEMIC TRANSLATION GUIDELINES FOR HINDI:
+- Maintain Sanskrit terms in their original form when they appear
+- Sanskrit vocabulary often appears in academic or literary contexts
+- Preserve proper nouns, technical terms, and traditional expressions
+- When uncertain about etymology, retain the original term`;
     } else if (sourceLanguage === 'sanskrit') {
       sourceLang = 'Sanskrit';
       preserveInstructions = `
-PRESERVATION RULES FOR SANSKRIT TEXT:
-- Keep all Hindi words/phrases UNTRANSLATED (write them as-is)
-- Hindi words may appear mixed with Sanskrit text
-- Common Hindi words to preserve: modern terms, names, colloquial expressions, etc.
-- If you're unsure if a word is Hindi, preserve it to be safe`;
+ACADEMIC TRANSLATION GUIDELINES FOR SANSKRIT:
+- Maintain Hindi terms in their original form when they appear
+- Modern Hindi vocabulary may appear in contemporary texts
+- Preserve proper nouns, technical terms, and contemporary expressions
+- When uncertain about language origin, retain the original term`;
     }
     
-    const prompt = `Provide a literal, line-by-line English translation of the following ${sourceLang} text. Do not transliterate from Devanagari to the Latin script; provide the English meaning.
+    const prompt = `Please provide an academic English translation of the following ${sourceLang} text. Convert each line from Devanagari script to its English meaning while maintaining the original structure.
 
-IMPORTANT INSTRUCTIONS:
-1. Translate EVERY SINGLE SENTENCE to its English meaning.
-2. Do not provide summaries or paraphrases.
-3. Do not combine multiple sentences into one.
-4. Preserve the exact line structure and formatting.
-5. If a line is a mix of ${sourceLang} and English, translate the ${sourceLang} parts and keep the English parts.
-6. If a line is already entirely in English, keep it as is.
-7. If a line is empty or contains only whitespace, keep it empty.
-8. Do not add any explanations, commentary, or labels like "Translation:". Just provide the raw translated text.
+TRANSLATION GUIDELINES:
+1. Convert each sentence to its corresponding English meaning
+2. Maintain the document's original formatting and line structure
+3. Preserve the exact sequence and organization of content
+4. For mixed-language content, translate the ${sourceLang} portions while keeping English portions unchanged
+5. Retain empty lines and whitespace as they appear
+6. Provide only the translated content without additional commentary
 
 ${preserveInstructions}
 
-Text to translate:
+Source text for translation:
 ${text}
 
-English Translation (line by line):`;
+Translated text:`;
     
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `You are a precise, literal translator. Your task is to translate text from ${sourceLang} to English, line by line. You must provide the English meaning, not a transliteration. Follow preservation rules strictly.`
+          content: `You are an academic translator specializing in ${sourceLang} texts. Your role is to provide accurate English translations while maintaining scholarly precision and cultural context.`
         },
         {
           role: "user",
@@ -364,10 +421,52 @@ English Translation (line by line):`;
     });
     
     const translation = completion.choices[0].message.content.trim();
-    console.log('Translation completed');
-    sendProgress(`Translation completed successfully.`);
     
-    return translation;
+    // Handle content moderation responses in translation
+    if (translation.toLowerCase().includes("sorry, i can't assist") || 
+        translation.toLowerCase().includes("i cannot help") ||
+        translation.toLowerCase().includes("unable to process")) {
+      console.warn(`Content moderation triggered during translation, attempting alternative approach...`);
+      
+      // Fallback: simpler translation prompt
+      try {
+        const fallbackCompletion = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: `You are a linguistic assistant. Convert the provided text to English while maintaining academic accuracy.`
+            },
+            {
+              role: "user",
+              content: `Convert this ${sourceLang} academic text to English:\n\n${text}`
+            }
+          ],
+          max_tokens: 2000,
+          temperature: 0.1
+        });
+        
+        const fallbackTranslation = fallbackCompletion.choices[0].message.content.trim();
+        
+        if (fallbackTranslation.toLowerCase().includes("sorry")) {
+          console.log('Translation completed with restrictions');
+          sendProgress(`Translation completed with some restrictions.`);
+          return `Translation unavailable due to content restrictions. Original text: ${text}`;
+        } else {
+          console.log('Translation completed using fallback method');
+          sendProgress(`Translation completed successfully.`);
+          return fallbackTranslation;
+        }
+      } catch (fallbackError) {
+        console.error('Fallback translation also failed:', fallbackError.message);
+        sendProgress(`Translation failed: ${fallbackError.message}`);
+        return `Translation error. Original text: ${text}`;
+      }
+    } else {
+      console.log('Translation completed');
+      sendProgress(`Translation completed successfully.`);
+      return translation;
+    }
   } catch (error) {
     console.error('Error in GPT translation:', error);
     sendProgress(`Translation failed: ${error.message}`);

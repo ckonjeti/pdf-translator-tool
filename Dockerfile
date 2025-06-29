@@ -1,9 +1,9 @@
 # Render Deployment Dockerfile
-# Optimized for Render's build environment
+# Optimized for GPT-4 Vision OCR and Canvas support
 
 FROM node:18-alpine
 
-# Install system dependencies for canvas
+# Install system dependencies for canvas (PDF rendering)
 RUN apk add --no-cache \
     python3 \
     make \
@@ -31,15 +31,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production --legacy-peer-deps
 
-# Copy ALL source files except node_modules (handled by .dockerignore)
+# Copy all source files
 COPY . .
 
-# Explicitly ensure client public directory exists with index.html
-RUN ls -la client/ && \
-    ls -la client/public/ && \
-    cat client/public/index.html
-
-# Install client dependencies and build
+# Install client dependencies and build React app
 WORKDIR /app/client
 RUN npm ci --legacy-peer-deps
 RUN npm run build

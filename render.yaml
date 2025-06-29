@@ -12,6 +12,7 @@ services:
         value: production
       - key: NPM_CONFIG_PRODUCTION
         value: false
+      # OPENAI_API_KEY must be set in Render dashboard
     autoDeploy: true
     domains:
       - translatorassistant.com
