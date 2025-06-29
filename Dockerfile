@@ -29,10 +29,12 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY client/package*.json ./client/
 
-# Install dependencies
+# Install server dependencies
 RUN npm ci --only=production --legacy-peer-deps
+
+# Copy source code
+COPY . .
 
 # Install client dependencies and build
 WORKDIR /app/client
@@ -41,9 +43,6 @@ RUN npm run build
 
 # Back to app root
 WORKDIR /app
-
-# Copy source code
-COPY . .
 
 # Create uploads directory
 RUN mkdir -p uploads/images
