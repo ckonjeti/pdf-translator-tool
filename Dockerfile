@@ -27,22 +27,22 @@ RUN apk add --no-cache \
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy server package files and install dependencies
 COPY package*.json ./
-
-# Install server dependencies
 RUN npm ci --only=production --legacy-peer-deps
 
-# Copy source code
-COPY . .
+# Copy client directory entirely
+COPY client/ ./client/
 
 # Install client dependencies and build
 WORKDIR /app/client
 RUN npm ci --legacy-peer-deps
 RUN npm run build
 
-# Back to app root
+# Back to app root and copy remaining server files
 WORKDIR /app
+COPY server.js ./
+COPY uploads/ ./uploads/ 2>/dev/null || true
 
 # Create uploads directory
 RUN mkdir -p uploads/images
