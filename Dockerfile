@@ -27,36 +27,37 @@ RUN apk add --no-cache \
 # Set working directory
 WORKDIR /app
 
-# Copy server package files and install dependencies
+# Copy all package files first for better Docker layer caching
 COPY package*.json ./
+COPY client/package*.json ./client/
+
+# Install server dependencies (production only)
 RUN npm ci --only=production --legacy-peer-deps
 
-# Copy client directory entirely
-COPY client/ ./client/
+# Copy all source code
+COPY . .
 
-# Install client dependencies and build
+# Install client dependencies and build the React app
 WORKDIR /app/client
 RUN npm ci --legacy-peer-deps
 RUN npm run build
 
-# Back to app root and copy remaining server files
+# Back to app root
 WORKDIR /app
-COPY server.js ./
-COPY uploads/ ./uploads/ 2>/dev/null || true
 
 # Create uploads directory
 RUN mkdir -p uploads/images
 
-# Create non-root user
+# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 -G nodejs
 
-# Change ownership
+# Change ownership of app directory
 RUN chown -R nodejs:nodejs /app
 USER nodejs
 
-# Expose port
-EXPOSE $PORT
+# Expose port (Render uses PORT environment variable)
+EXPOSE 10000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
