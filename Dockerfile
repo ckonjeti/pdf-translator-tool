@@ -31,23 +31,17 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production --legacy-peer-deps
 
-# Copy client directory first
-COPY client/ ./client/
+# Copy ALL source files except node_modules (handled by .dockerignore)
+COPY . .
 
-# Copy server file
-COPY server.js ./
+# Explicitly ensure client public directory exists with index.html
+RUN ls -la client/ && \
+    ls -la client/public/ && \
+    cat client/public/index.html
 
 # Install client dependencies and build
 WORKDIR /app/client
-
-# Debug BEFORE npm ci
-RUN echo "=== BEFORE npm ci ===" && ls -la && echo "=== public/ ===" && ls -la public/
-
 RUN npm ci --legacy-peer-deps
-
-# Debug AFTER npm ci
-RUN echo "=== AFTER npm ci ===" && ls -la && echo "=== public/ ===" && ls -la public/ 2>/dev/null || echo "public/ directory MISSING"
-
 RUN npm run build
 
 # Back to app root
