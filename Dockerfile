@@ -39,7 +39,15 @@ COPY server.js ./
 
 # Install client dependencies and build
 WORKDIR /app/client
+
+# Debug BEFORE npm ci
+RUN echo "=== BEFORE npm ci ===" && ls -la && echo "=== public/ ===" && ls -la public/
+
 RUN npm ci --legacy-peer-deps
+
+# Debug AFTER npm ci
+RUN echo "=== AFTER npm ci ===" && ls -la && echo "=== public/ ===" && ls -la public/ 2>/dev/null || echo "public/ directory MISSING"
+
 RUN npm run build
 
 # Back to app root
