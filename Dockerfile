@@ -27,27 +27,18 @@ RUN apk add --no-cache \
 # Set working directory
 WORKDIR /app
 
-# Copy all package files first for better Docker layer caching
+# Copy server package files and install dependencies
 COPY package*.json ./
-COPY client/package*.json ./client/
-
-# Install server dependencies (production only)
 RUN npm ci --only=production --legacy-peer-deps
 
-# Copy all source code
-COPY . .
+# Copy client directory first
+COPY client/ ./client/
 
-# Install client dependencies and build the React app
+# Copy server file
+COPY server.js ./
+
+# Install client dependencies and build
 WORKDIR /app/client
-
-# Debug: Check what files exist
-RUN echo "=== Debugging client directory structure ===" && \
-    ls -la && \
-    echo "=== Public directory contents ===" && \
-    ls -la public/ && \
-    echo "=== Checking for index.html ===" && \
-    [ -f public/index.html ] && echo "index.html EXISTS" || echo "index.html MISSING"
-
 RUN npm ci --legacy-peer-deps
 RUN npm run build
 
