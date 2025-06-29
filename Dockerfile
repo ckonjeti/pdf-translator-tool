@@ -39,6 +39,15 @@ COPY . .
 
 # Install client dependencies and build the React app
 WORKDIR /app/client
+
+# Debug: Check what files exist
+RUN echo "=== Debugging client directory structure ===" && \
+    ls -la && \
+    echo "=== Public directory contents ===" && \
+    ls -la public/ && \
+    echo "=== Checking for index.html ===" && \
+    [ -f public/index.html ] && echo "index.html EXISTS" || echo "index.html MISSING"
+
 RUN npm ci --legacy-peer-deps
 RUN npm run build
 

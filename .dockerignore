@@ -1,0 +1,11 @@
+# Only ignore what we absolutely don't need
+node_modules/
+client/node_modules/
+.git/
+*.log
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Keep everything else including client/public/index.html
