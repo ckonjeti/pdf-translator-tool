@@ -42,7 +42,24 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker.en
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'client/build')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Enhanced static serving for uploads with Safari-compatible CORS headers
+app.use('/uploads', (req, res, next) => {
+  // Set Safari-compatible CORS headers for images
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'false');
+  
+  // Safari-specific headers for image loading
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  
+  // Cache control for better performance
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 // Ensure uploads directory exists (only for temporary processing)
 fs.ensureDirSync(path.join(__dirname, 'uploads'));
@@ -209,19 +226,25 @@ async function convertPdfToImages(pdfPath, outputDir, progressCallback, pagesToC
 }
 
 // GPT-4 Vision OCR function to extract text from images
-async function extractTextFromImages(imageObjects, language, sendProgress) {
+async function extractTextFromImages(imageObjects, language, sendProgress, customOcrPrompt = null) {
   try {
     console.log('Starting GPT-4 Vision OCR for language:', language);
     sendProgress(`Starting GPT-4 Vision text extraction for ${imageObjects.length} pages...`, 50, 100);
     
-    // Define language-specific prompts (neutral, academic language)
+    // Use custom prompt if provided, otherwise use default language-specific prompts
     let languagePrompt = '';
-    if (language === 'hindi') {
-      languagePrompt = 'This is an academic document containing Hindi text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.';
-    } else if (language === 'sanskrit') {
-      languagePrompt = 'This is an academic document containing Sanskrit text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.';
+    if (customOcrPrompt) {
+      languagePrompt = customOcrPrompt;
+      console.log('Using custom OCR prompt');
     } else {
-      languagePrompt = 'This is an academic document containing text. Please perform optical character recognition to extract all visible text accurately.';
+      if (language === 'hindi') {
+        languagePrompt = 'This is an academic document containing Hindi text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.';
+      } else if (language === 'sanskrit') {
+        languagePrompt = 'This is an academic document containing Sanskrit text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.';
+      } else {
+        languagePrompt = 'This is an academic document containing text. Please perform optical character recognition to extract all visible text accurately.';
+      }
+      console.log('Using default OCR prompt for language:', language);
     }
     
     const results = [];
@@ -261,15 +284,10 @@ async function extractTextFromImages(imageObjects, language, sendProgress) {
         const imageBuffer = await fs.readFile(fullImagePath);
         const base64Image = imageBuffer.toString('base64');
 
-        // Use GPT-4 Vision for OCR
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o", // Latest model with vision capabilities
-          messages: [{
-            role: "user",
-            content: [
-              { 
-                type: "text", 
-                text: `${languagePrompt}
+        // Prepare OCR prompt text
+        const ocrPromptText = customOcrPrompt 
+          ? languagePrompt // Custom prompt is complete
+          : `${languagePrompt}
 
 INSTRUCTIONS FOR TEXT EXTRACTION:
 1. Identify and transcribe every character, word, and line visible in the document
@@ -279,7 +297,17 @@ INSTRUCTIONS FOR TEXT EXTRACTION:
 5. Include all numbers, punctuation marks, and symbols present
 6. For multi-column layouts, transcribe from left to right, top to bottom
 7. Provide only the transcribed text without additional commentary
-8. If the image contains no readable text, respond with "No text detected"`
+8. If the image contains no readable text, respond with "No text detected"`;
+
+        // Use GPT-4 Vision for OCR
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o", // Latest model with vision capabilities
+          messages: [{
+            role: "user",
+            content: [
+              { 
+                type: "text", 
+                text: ocrPromptText
               },
               { 
                 type: "image_url", 
@@ -360,34 +388,42 @@ INSTRUCTIONS FOR TEXT EXTRACTION:
 }
 
 // GPT translation function
-async function translateText(text, sourceLanguage, sendProgress) {
+async function translateText(text, sourceLanguage, sendProgress, customTranslationPrompt = null) {
   try {
     console.log('Starting GPT translation for:', sourceLanguage);
     sendProgress(`Starting translation for ${sourceLanguage} text...`);
     
-    let targetLanguage = 'English';
-    let sourceLang = 'the source language';
-    let preserveInstructions = '';
+    let prompt = '';
     
-    if (sourceLanguage === 'hindi') {
-      sourceLang = 'Hindi';
-      preserveInstructions = `
+    if (customTranslationPrompt) {
+      // Use custom prompt and replace {TEXT} placeholder with actual text
+      prompt = customTranslationPrompt.replace('{TEXT}', text);
+      console.log('Using custom translation prompt');
+    } else {
+      // Use default prompt structure
+      let targetLanguage = 'English';
+      let sourceLang = 'the source language';
+      let preserveInstructions = '';
+      
+      if (sourceLanguage === 'hindi') {
+        sourceLang = 'Hindi';
+        preserveInstructions = `
 ACADEMIC TRANSLATION GUIDELINES FOR HINDI:
 - Maintain Sanskrit terms in their original form when they appear
 - Sanskrit vocabulary often appears in academic or literary contexts
 - Preserve proper nouns, technical terms, and traditional expressions
 - When uncertain about etymology, retain the original term`;
-    } else if (sourceLanguage === 'sanskrit') {
-      sourceLang = 'Sanskrit';
-      preserveInstructions = `
+      } else if (sourceLanguage === 'sanskrit') {
+        sourceLang = 'Sanskrit';
+        preserveInstructions = `
 ACADEMIC TRANSLATION GUIDELINES FOR SANSKRIT:
 - Maintain Hindi terms in their original form when they appear
 - Modern Hindi vocabulary may appear in contemporary texts
 - Preserve proper nouns, technical terms, and contemporary expressions
 - When uncertain about language origin, retain the original term`;
-    }
-    
-    const prompt = `Please provide an academic English translation of the following ${sourceLang} text. Convert each line from Devanagari script to its English meaning while maintaining the original structure.
+      }
+      
+      prompt = `Please provide an academic English translation of the following ${sourceLang} text. Convert each line from Devanagari script to its English meaning while maintaining the original structure.
 
 TRANSLATION GUIDELINES:
 1. Convert each sentence to its corresponding English meaning
@@ -403,13 +439,19 @@ Source text for translation:
 ${text}
 
 Translated text:`;
+      console.log('Using default translation prompt for language:', sourceLanguage);
+    }
     
+    const systemContent = customTranslationPrompt 
+      ? "You are an AI assistant that follows the given instructions precisely."
+      : `You are an academic translator specializing in ${sourceLanguage === 'hindi' ? 'Hindi' : sourceLanguage === 'sanskrit' ? 'Sanskrit' : 'multilingual'} texts. Your role is to provide accurate English translations while maintaining scholarly precision and cultural context.`;
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `You are an academic translator specializing in ${sourceLang} texts. Your role is to provide accurate English translations while maintaining scholarly precision and cultural context.`
+          content: systemContent
         },
         {
           role: "user",
@@ -518,10 +560,14 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
     const pageRanges = req.body.pageRanges;
     const pagesToProcess = parsePageRanges(pageRanges);
     const socketId = req.body.socketId; // Get socket ID from request
+    const customOcrPrompt = req.body.ocrPrompt; // Custom OCR prompt from user
+    const customTranslationPrompt = req.body.translationPrompt; // Custom translation prompt from user
 
     console.log('Requested page ranges:', pageRanges);
     console.log('Parsed pages to process:', pagesToProcess);
     console.log('Socket ID:', socketId);
+    console.log('Custom OCR prompt provided:', !!customOcrPrompt);
+    console.log('Custom translation prompt provided:', !!customTranslationPrompt);
 
     // Progress tracking function with WebSocket emission
     const progressUpdates = [];
@@ -564,7 +610,7 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
     
     // Extract text using OCR
     console.log('Starting OCR processing...');
-    const ocrResults = await extractTextFromImages(imageObjects, language, sendProgress);
+    const ocrResults = await extractTextFromImages(imageObjects, language, sendProgress, customOcrPrompt);
     
     // Translate text using GPT
     console.log('Starting translation processing...');
@@ -575,7 +621,7 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
       const page = ocrResults[i];
       const progressPercent = Math.round(75 + (i / ocrResults.length) * 20); // 75-95% for translation
       sendProgress(`Translating page ${page.page}...`, progressPercent, 100);
-      const translation = await translateText(page.text, language, (msg) => sendProgress(msg, progressPercent, 100));
+      const translation = await translateText(page.text, language, (msg) => sendProgress(msg, progressPercent, 100), customTranslationPrompt);
       resultsWithTranslation.push({
         ...page,
         translation: translation
