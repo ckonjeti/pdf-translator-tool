@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx eslint:*)",
+      "Bash(find:*)",
+      "Bash(node:*)",
+      "Bash(python3:*)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   }

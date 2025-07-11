@@ -556,7 +556,7 @@ Translated text:`;
                           fontWeight: 'bold',
                           color: '#495057'
                         }}>
-                          = Text Extraction (OCR) Prompt:
+                          📄 Text Extraction (OCR) Prompt:
                         </label>
                         <textarea
                           value={ocrPrompt}
@@ -584,7 +584,7 @@ Translated text:`;
                           fontWeight: 'bold',
                           color: '#495057'
                         }}>
-                          < Translation Prompt:
+                          📝 Translation Prompt:
                         </label>
                         <textarea
                           value={translationPrompt}
@@ -933,7 +933,7 @@ Translated text:`;
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <span>< Translation</span>
+                      <span>🔄 Translation</span>
                       <div style={{ display: 'flex', gap: '5px' }}>
                         {editingTranslationOnly[currentPageIndex] ? (
                           <>
