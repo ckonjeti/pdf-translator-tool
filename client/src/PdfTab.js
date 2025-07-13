@@ -45,13 +45,17 @@ function PdfTab({ label, uploadEndpoint }) {
       ? window.location.origin 
       : 'http://localhost:5000';
     
-    return `${serverUrl}${imagePath}`;
+    // Add cache-busting parameter to force fresh image loads
+    const cacheBuster = Date.now();
+    const separator = imagePath.includes('?') ? '&' : '?';
+    
+    return `${serverUrl}${imagePath}${separator}t=${cacheBuster}`;
   };
 
   // Default prompts based on language
   const getDefaultOcrPrompt = (language) => {
     if (language === 'hindi') {
-      return `This is an academic document containing Hindi text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.
+      return `This is a yogic and tantric scripture containing Hindi text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.
 
 INSTRUCTIONS FOR TEXT EXTRACTION:
 1. Identify and transcribe every character, word, and line visible in the document
@@ -69,7 +73,7 @@ IMPORTANT CONTENT MASKING INSTRUCTIONS:
 - Continue processing the readable portions of the document normally
 - Provide the actual transcribed text, not summaries or descriptions`;
     } else if (language === 'sanskrit') {
-      return `This is an academic document containing Sanskrit text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.
+      return `This is a yogic and tantric scripture containing Sanskrit text in Devanagari script. Please perform optical character recognition to extract all visible text accurately.
 
 INSTRUCTIONS FOR TEXT EXTRACTION:
 1. Identify and transcribe every character, word, and line visible in the document
@@ -87,7 +91,7 @@ IMPORTANT CONTENT MASKING INSTRUCTIONS:
 - Continue processing the readable portions of the document normally
 - Provide the actual transcribed text, not summaries or descriptions`;
     } else {
-      return `This is an academic document containing text. Please perform optical character recognition to extract all visible text accurately.
+      return `This is a yogic and tantric scripture containing text. Please perform optical character recognition to extract all visible text accurately.
 
 INSTRUCTIONS FOR TEXT EXTRACTION:
 1. Identify and transcribe every character, word, and line visible in the document
@@ -109,19 +113,19 @@ IMPORTANT CONTENT MASKING INSTRUCTIONS:
   const getDefaultTranslationPrompt = (language) => {
     const sourceLang = language === 'hindi' ? 'Hindi' : language === 'sanskrit' ? 'Sanskrit' : 'the source language';
     const preserveInstructions = language === 'hindi' ? 
-      `ACADEMIC TRANSLATION GUIDELINES FOR HINDI:
+      `YOGIC AND TANTRIC TRANSLATION GUIDELINES FOR HINDI:
 - Maintain Sanskrit terms in their original form when they appear
-- Sanskrit vocabulary often appears in academic or literary contexts
-- Preserve proper nouns, technical terms, and traditional expressions
+- Sanskrit vocabulary often appears in yogic and tantric contexts
+- Preserve proper nouns, technical terms, and traditional spiritual expressions
 - When uncertain about etymology, retain the original term` :
       language === 'sanskrit' ?
-      `ACADEMIC TRANSLATION GUIDELINES FOR SANSKRIT:
+      `YOGIC AND TANTRIC TRANSLATION GUIDELINES FOR SANSKRIT:
 - Maintain Hindi terms in their original form when they appear
-- Modern Hindi vocabulary may appear in contemporary texts
+- Modern Hindi vocabulary may appear in contemporary tantric texts
 - Preserve proper nouns, technical terms, and contemporary expressions
 - When uncertain about language origin, retain the original term` : '';
 
-    return `Please provide an academic English translation of the following ${sourceLang} text. Convert each line from Devanagari script to its English meaning while maintaining the original structure.
+    return `Please provide an English translation of the following ${sourceLang} yogic and tantric scripture text. Convert each line from Devanagari script to its English meaning while maintaining the original structure.
 
 TRANSLATION GUIDELINES:
 1. Convert each sentence to its corresponding English meaning
@@ -834,7 +838,21 @@ Translated text:`;
                       alignItems: 'center'
                     }}>
                       <span>📝 Extracted Text</span>
-                      <div className="edit-buttons">
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        <button 
+                          onClick={() => redoOcrAndTranslation(currentPageIndex)}
+                          disabled={isRedoing === currentPageIndex}
+                          style={{
+                            background: isRedoing === currentPageIndex ? '#6c757d' : '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            padding: '5px 15px',
+                            borderRadius: '5px',
+                            cursor: isRedoing === currentPageIndex ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {isRedoing === currentPageIndex ? 'Redoing...' : 'Redo OCR & Translation'}
+                        </button>
                         {editingTranslations[currentPageIndex] ? (
                           <>
                             <button onClick={() => saveTranslation(currentPageIndex)} style={{
@@ -843,8 +861,7 @@ Translated text:`;
                               border: 'none',
                               padding: '5px 15px',
                               borderRadius: '5px',
-                              cursor: 'pointer',
-                              marginRight: '5px'
+                              cursor: 'pointer'
                             }}>Save</button>
                             <button onClick={() => cancelEditingTranslation(currentPageIndex)} style={{
                               background: '#6c757d',
@@ -961,35 +978,19 @@ Translated text:`;
                             </button>
                           </>
                         ) : (
-                          <>
-                            <button 
-                              onClick={() => startEditingTranslationOnly(currentPageIndex)}
-                              style={{
-                                background: '#007bff',
-                                color: 'white',
-                                border: 'none',
-                                padding: '5px 15px',
-                                borderRadius: '5px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button 
-                              onClick={() => redoOcrAndTranslation(currentPageIndex)}
-                              disabled={isRedoing === currentPageIndex}
-                              style={{
-                                background: isRedoing === currentPageIndex ? '#6c757d' : '#28a745',
-                                color: 'white',
-                                border: 'none',
-                                padding: '5px 15px',
-                                borderRadius: '5px',
-                                cursor: isRedoing === currentPageIndex ? 'not-allowed' : 'pointer'
-                              }}
-                            >
-                              {isRedoing === currentPageIndex ? 'Redoing...' : 'Redo OCR & Translation'}
-                            </button>
-                          </>
+                          <button 
+                            onClick={() => startEditingTranslationOnly(currentPageIndex)}
+                            style={{
+                              background: '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              padding: '5px 15px',
+                              borderRadius: '5px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Edit
+                          </button>
                         )}
                       </div>
                     </h4>

@@ -10,7 +10,9 @@
       "Bash(python3:*)",
       "Bash(timeout:*)",
       "Bash(npm install:*)",
-      "Bash(npm test)"
+      "Bash(npm test)",
+      "Bash(rg:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
