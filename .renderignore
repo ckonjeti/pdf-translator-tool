@@ -50,6 +50,11 @@ uploads/*
 claude-cli.js
 claude-dev-helper.js
 
+# New React component files (included in client build)
+# client/src/HindiPage.js - included in client build
+# client/src/PdfTab.js - included in client build  
+# client/src/SanskritPage.js - included in client build
+
 # Backup files
 *.backup
 *.original

@@ -8,7 +8,9 @@
       "Bash(find:*)",
       "Bash(node:*)",
       "Bash(python3:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(npm install:*)",
+      "Bash(npm test)"
     ],
     "deny": []
   }
