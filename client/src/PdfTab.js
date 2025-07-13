@@ -291,6 +291,7 @@ Translated text:`;
     setShowPromptEditor(false);
     setOcrPrompt('');
     setTranslationPrompt('');
+    setModalImagePath(null);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -770,8 +771,7 @@ Translated text:`;
                 gap: '20px',
                 alignItems: 'flex-start',
                 minHeight: '95vh',
-                width: '100%',
-                height: '95vh'
+                width: '100%'
               }}>
                 
                 {/* Image Column - Left Side (Maximized) */}
@@ -808,8 +808,7 @@ Translated text:`;
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '20px',
-                  minWidth: 0,
-                  height: '100%'
+                  minWidth: 0
                 }}>
                   {/* Extracted Text Container */}
                   <div style={{
@@ -817,12 +816,12 @@ Translated text:`;
                     padding: '20px',
                     borderRadius: '10px',
                     border: '1px solid #e9ecef',
-                    flex: '1',
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
-                    minHeight: '45vh',
-                    height: '45vh'
+                    height: '300px',
+                    minHeight: '200px',
+                    resize: 'vertical'
                   }}>
                     <h4 style={{ 
                       margin: '0 0 15px 0', 
@@ -913,12 +912,12 @@ Translated text:`;
                     padding: '20px',
                     borderRadius: '10px',
                     border: '1px solid #e9ecef',
-                    flex: '1',
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
-                    minHeight: '45vh',
-                    height: '45vh'
+                    height: '300px',
+                    minHeight: '200px',
+                    resize: 'vertical'
                   }}>
                     <h4 style={{ 
                       margin: '0 0 15px 0', 
