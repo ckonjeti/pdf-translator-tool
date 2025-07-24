@@ -13,7 +13,15 @@ services:
       - key: NPM_CONFIG_PRODUCTION
         value: false
       # OPENAI_API_KEY must be set in Render dashboard
+      # MONGODB_URI must be set in Render dashboard (for user authentication and translation storage)
+      # SESSION_SECRET should be set in Render dashboard (for secure user sessions)
     autoDeploy: true
     domains:
       - translatorassistant.com
       - www.translatorassistant.com
+
+  # Optional: Add MongoDB database service (if using Render's MongoDB)
+  # - type: database
+  #   name: sanskrit-translator-db
+  #   plan: starter
+  #   region: oregon

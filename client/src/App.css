@@ -8,10 +8,85 @@
 /* Navigation styles */
 .tab-navigation {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
   gap: 10px;
   margin: 0;
-  padding: 20px 20px 0 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.nav-left {
+  display: flex;
+  gap: 10px;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-name {
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.logout-button {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.logout-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.auth-links {
+  display: flex;
+  gap: 10px;
+}
+
+.auth-link {
+  padding: 8px 16px;
+  color: white;
+  text-decoration: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.auth-link:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.auth-link.primary {
+  background: rgba(255, 255, 255, 0.9);
+  color: #667eea;
+  border-color: white;
+}
+
+.auth-link.primary:hover {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .tab-button {
@@ -260,6 +335,29 @@
   }
 }
 
+@media (max-width: 768px) {
+  .tab-navigation {
+    flex-direction: column;
+    gap: 15px;
+    padding: 15px;
+  }
+  
+  .nav-left, .nav-right {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .user-menu {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+  
+  .auth-links {
+    justify-content: center;
+  }
+}
+
 @media (max-width: 480px) {
   .upload-section h1 {
     font-size: 1.8rem;
@@ -275,6 +373,25 @@
   
   .images-section {
     padding: 10px;
+  }
+  
+  .tab-navigation {
+    padding: 10px;
+  }
+  
+  .nav-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .tab-button {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+  
+  .auth-link {
+    padding: 6px 12px;
+    font-size: 13px;
   }
 }
 

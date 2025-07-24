@@ -1,13 +1,35 @@
 require('dotenv').config();
 const express = require('express');
+const mongoose = require('mongoose');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs-extra');
 const cors = require('cors');
 // Removed tesseract.js - now using GPT-4 Vision for OCR
 const pdfjsLib = require('pdfjs-dist');
-const { createCanvas } = require('canvas');
+// Try to load Canvas, fall back if not available (WSL compatibility)
+let createCanvas;
+try {
+  createCanvas = require('canvas').createCanvas;
+  console.log('Canvas module loaded successfully');
+} catch (error) {
+  console.warn('Canvas module failed to load (this may happen in WSL):', error.message);
+  console.log('PDF processing will be limited without Canvas');
+  // Provide a mock createCanvas for basic functionality
+  createCanvas = (width, height) => {
+    throw new Error('Canvas not available - please install native dependencies or use a different environment');
+  };
+}
 const OpenAI = require('openai');
+
+// Import models and middleware
+const User = require('./models/User');
+const Translation = require('./models/Translation');
+const authRoutes = require('./routes/auth');
+const translationRoutes = require('./routes/translations');
+const { requireAuth, optionalAuth } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -69,7 +91,7 @@ async function retryOpenAICall(apiCall, maxRetries = 3, baseDelay = 1000) {
   }
 }
 
-// Validate API key exists
+// Validate required environment variables
 if (!process.env.OPENAI_API_KEY) {
   console.error('ERROR: OPENAI_API_KEY environment variable is not set!');
   console.log('Please set your OpenAI API key in the environment variables or .env file');
@@ -77,13 +99,64 @@ if (!process.env.OPENAI_API_KEY) {
   console.log('OpenAI API key loaded successfully');
 }
 
+if (!process.env.MONGODB_URI) {
+  console.error('ERROR: MONGODB_URI environment variable is not set!');
+  console.log('Please set your MongoDB connection string in the environment variables or .env file');
+  console.log('Example: MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/dbname');
+} else {
+  console.log('MongoDB URI loaded successfully');
+}
+
+if (!process.env.SESSION_SECRET) {
+  console.warn('WARNING: SESSION_SECRET not set, using default (not secure for production)');
+}
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator')
+  .then(() => {
+    console.log('Connected to MongoDB successfully');
+  })
+  .catch((error) => {
+    console.error('MongoDB connection error:', error);
+    console.log('Please check your MONGODB_URI and ensure your MongoDB cluster is running');
+  });
+
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker.entry');
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-domain.com'] // Replace with your actual domain
+    : ['http://localhost:3000', 'http://localhost:5000'],
+  credentials: true
+}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator',
+    touchAfter: 24 * 3600 // lazy session update
+  }),
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
+  }
+}));
+
 app.use(express.static(path.join(__dirname, 'client/build')));
+
+// Authentication routes
+app.use('/api/auth', authRoutes);
+
+// Translation history routes
+app.use('/api/translations', translationRoutes);
 
 // Enhanced static serving for uploads with Safari-compatible CORS headers
 app.use('/uploads', (req, res, next) => {
@@ -1559,8 +1632,8 @@ app.post('/api/redo-ocr-translation', async (req, res) => {
   }
 });
 
-// Upload endpoint with OCR and translation
-app.post('/api/upload', upload.single('pdf'), async (req, res) => {
+// Upload endpoint with OCR and translation (now with user authentication)
+app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => {
   try {
     console.log('Upload request received');
     
@@ -1669,9 +1742,11 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
       sendProgress(`Page ${page.page} translation completed.`, completedPercent, 100);
     }
     
+    // Note: Translation is no longer automatically saved - user must click save button
+    
     // Clean up the uploaded PDF (no permanent storage)
     console.log('Cleaning up uploaded PDF...');
-    sendProgress('Cleaning up temporary files...', 95, 100);
+    sendProgress('Cleaning up temporary files...', 99, 100);
     await fs.remove(pdfPath);
     
     // Note: We keep the extracted images for potential redo operations
@@ -1686,7 +1761,9 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
       fileSize: req.file.size,
       pages: resultsWithTranslation,
       pageCount: imageObjects.length,
-      progress: progressUpdates
+      progress: progressUpdates,
+      language: language,
+      userLoggedIn: !!req.userId
     });
     
   } catch (error) {

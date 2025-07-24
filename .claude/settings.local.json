@@ -12,7 +12,11 @@
       "Bash(npm install:*)",
       "Bash(npm test)",
       "Bash(rg:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npm start)",
+      "Bash(npm rebuild:*)",
+      "Bash(sudo apt-get:*)",
+      "Bash(sudo apt-get install:*)"
     ],
     "deny": []
   }

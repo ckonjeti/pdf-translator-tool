@@ -5,15 +5,22 @@ import * as pdfjsLib from 'pdfjs-dist';
 import io from 'socket.io-client';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
+import { useAuth } from './AuthContext';
 
-// Set up PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Set up PDF.js worker - use webpack-friendly approach
+if (typeof window !== 'undefined') {
+  // In browser environment, use dynamic import
+  pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker.entry');
+}
 
 function PdfTab({ label, uploadEndpoint }) {
+  const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [translationData, setTranslationData] = useState(null);
   const [modalImagePath, setModalImagePath] = useState(null);
   const [totalPages, setTotalPages] = useState(0);
   const [pageRanges, setPageRanges] = useState('');
@@ -260,6 +267,14 @@ Translated text:`;
         setSuccess(`Successfully uploaded and processed: ${response.data.originalName} (${response.data.pageCount} pages)`);
         setOcrPages(response.data.pages || []);
         
+        // Store translation data for potential saving
+        setTranslationData({
+          originalFileName: response.data.originalName,
+          language: response.data.language,
+          fileSize: response.data.fileSize,
+          pages: response.data.pages || []
+        });
+        
         const initialEditableTranslations = {};
         const initialEditableTranslationOnly = {};
         (response.data.pages || []).forEach((page, index) => {
@@ -477,6 +492,54 @@ Translated text:`;
         console.error('Fallback export also failed:', fallbackError);
         setError('Failed to export translations');
       }
+    }
+  };
+
+  const saveToAccount = async () => {
+    if (!isAuthenticated) {
+      setError('Please log in to save translations');
+      return;
+    }
+
+    if (!translationData) {
+      setError('No translation data to save');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+
+      // Get current edited translations and OCR text
+      const updatedPages = translationData.pages.map((page, index) => ({
+        page: page.page,
+        pageNumber: page.page,
+        originalText: editableTranslations[index]?.split('\n\nTranslation:\n')[0] || page.text,
+        translatedText: editableTranslationOnly[index] || page.translation,
+        imagePath: page.imagePath
+      }));
+
+      const saveData = {
+        originalFileName: translationData.originalFileName,
+        language: translationData.language,
+        fileSize: translationData.fileSize,
+        pages: updatedPages
+      };
+
+      const response = await axios.post('/api/translations/save', saveData);
+
+      if (response.data.success) {
+        setSuccess('Translation saved successfully!');
+        // Clear translation data since it's now saved
+        setTranslationData(null);
+      } else {
+        setError('Failed to save translation');
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+      setError(error.response?.data?.message || 'Failed to save translation');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -750,6 +813,26 @@ Translated text:`;
                 </button>
               ))}
             </div>
+            {isAuthenticated && translationData && (
+              <button 
+                onClick={saveToAccount} 
+                className="save-button"
+                disabled={saving}
+                style={{
+                  marginRight: '10px',
+                  padding: '8px 16px',
+                  backgroundColor: saving ? '#6c757d' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                {saving ? '💾 Saving...' : '💾 Save Translation'}
+              </button>
+            )}
             <button onClick={exportTranslations} className="export-button">
               📄 Export Translations
             </button>
