@@ -1783,18 +1783,21 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
 
     // Track cancellation state
     let isCancelled = false;
+    let isUserCancelled = false;
     const checkCancellation = () => {
-      if (isCancelled) {
+      if (isCancelled && isUserCancelled) {
         throw new Error('Operation cancelled by user');
       }
+      // Don't throw for disconnection-based cancellation
     };
 
     // Register this operation for cancellation
     if (socketId) {
       activeOperations.set(socketId, {
-        cancel: () => {
-          console.log(`Cancelling operation for socket ${socketId}`);
+        cancel: (userInitiated = false) => {
+          console.log(`Cancelling operation for socket ${socketId}, user initiated: ${userInitiated}`);
           isCancelled = true;
+          isUserCancelled = userInitiated;
         }
       });
     }
@@ -1802,17 +1805,25 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     // Progress tracking function with WebSocket emission
     const progressUpdates = [];
     const sendProgress = (message, step = null, total = null) => {
-      // Check for cancellation before sending progress
-      checkCancellation();
-      
       const timestamp = new Date().toLocaleTimeString();
       const progressData = { timestamp, message, step, total };
       progressUpdates.push(progressData);
       console.log(`[${timestamp}] ${message}`);
       
-      // Emit progress to specific client via WebSocket
+      // Only check for cancellation if we're trying to send progress
+      // This prevents operations from being cancelled after client disconnect
+      // but allows them to complete if they're already in progress
       if (socketId) {
-        io.to(socketId).emit('progress', progressData);
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket && socket.connected) {
+          // Client is still connected, check for cancellation
+          checkCancellation();
+          socket.emit('progress', progressData);
+        } else {
+          // Client disconnected, but don't cancel the operation
+          // Just log that we couldn't send progress
+          console.log(`[${timestamp}] Client ${socketId} disconnected, cannot send progress: ${message}`);
+        }
       }
     };
     
@@ -1933,16 +1944,21 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     console.log('Upload, OCR, and translation successful, returning response');
     sendProgress('All processing completed successfully!', 100, 100);
     
-    res.json({ 
-      success: true, 
-      originalName: req.file.originalname,
-      fileSize: req.file.size,
-      pages: resultsWithTranslation,
-      pageCount: imageObjects.length,
-      progress: progressUpdates,
-      language: language,
-      userLoggedIn: !!req.userId
-    });
+    // Check if the response is still open before sending
+    if (!res.headersSent) {
+      res.json({ 
+        success: true, 
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        pages: resultsWithTranslation,
+        pageCount: imageObjects.length,
+        progress: progressUpdates,
+        language: language,
+        userLoggedIn: !!req.userId
+      });
+    } else {
+      console.log('Response already sent or client disconnected, but operation completed successfully');
+    }
     
   } catch (error) {
     console.error('Upload error:', error);
@@ -2007,7 +2023,7 @@ io.on('connection', (socket) => {
     console.log(`Cancellation requested for socket: ${socket.id}`);
     const operation = activeOperations.get(socket.id);
     if (operation && operation.cancel) {
-      operation.cancel();
+      operation.cancel(true); // User initiated cancellation
       activeOperations.delete(socket.id);
       socket.emit('operation-cancelled');
     }
@@ -2015,11 +2031,20 @@ io.on('connection', (socket) => {
   
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
-    // Clean up any active operations for this socket
+    // Give a grace period before cancelling operations due to disconnection
+    // This allows operations to complete even if client disconnects temporarily
     const operation = activeOperations.get(socket.id);
     if (operation && operation.cancel) {
-      operation.cancel();
-      activeOperations.delete(socket.id);
+      // Don't immediately cancel - just mark as disconnected
+      // The operation will continue but won't send progress updates
+      setTimeout(() => {
+        // Only cancel if operation is still running after grace period
+        if (activeOperations.has(socket.id)) {
+          console.log(`Grace period expired, cancelling operation for socket ${socket.id}`);
+          operation.cancel(false); // Not user initiated
+          activeOperations.delete(socket.id);
+        }
+      }, 30000); // 30 second grace period
     }
   });
 });

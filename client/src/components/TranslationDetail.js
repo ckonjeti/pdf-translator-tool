@@ -204,7 +204,7 @@ const TranslationDetail = () => {
               <h2>Page {page.pageNumber}</h2>
             </div>
             
-            <div className="three-column-layout">
+            <div className="two-column-layout">
               {/* Left Column - Image */}
               <div className="column image-column">
                 <div className="column-header">
@@ -237,53 +237,6 @@ const TranslationDetail = () => {
                   ) : (
                     <div className="no-image">
                       <p>No image available</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Middle Column - OCR Text */}
-              <div className="column ocr-column">
-                <div className="column-header">
-                  <h3>📝 OCR Text</h3>
-                  <button 
-                    onClick={() => startEditing(index, 'original')}
-                    className="edit-btn"
-                    disabled={editingPage === index}
-                  >
-                    Edit OCR
-                  </button>
-                </div>
-                <div className="text-container">
-                  {editingPage === index && editingField === 'original' ? (
-                    <div className="edit-container">
-                      <textarea
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        className="edit-textarea"
-                        rows={15}
-                        placeholder="Enter OCR text..."
-                      />
-                      <div className="edit-actions">
-                        <button 
-                          onClick={saveEdit} 
-                          className="save-btn"
-                          disabled={saving}
-                        >
-                          {saving ? 'Saving...' : 'Save'}
-                        </button>
-                        <button 
-                          onClick={cancelEditing} 
-                          className="cancel-btn"
-                          disabled={saving}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-content original-text">
-                      {page.originalText || 'No text extracted'}
                     </div>
                   )}
                 </div>

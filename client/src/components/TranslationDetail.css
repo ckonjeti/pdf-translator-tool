@@ -157,11 +157,11 @@
   border: 1px solid #e1e5e9;
 }
 
-/* Three Column Layout */
-.three-column-layout {
+/* Two Column Layout */
+.two-column-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 1.5rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
   align-items: start;
 }
 
@@ -375,7 +375,7 @@
 }
 
 @media (max-width: 1200px) {
-  .three-column-layout {
+  .two-column-layout {
     grid-template-columns: 1fr;
     gap: 2rem;
   }
@@ -411,7 +411,7 @@
     gap: 0.5rem;
   }
   
-  .three-column-layout {
+  .two-column-layout {
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
