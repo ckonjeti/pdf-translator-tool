@@ -111,14 +111,36 @@ if (!process.env.SESSION_SECRET) {
   console.warn('WARNING: SESSION_SECRET not set, using default (not secure for production)');
 }
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator')
+// Connect to MongoDB with SSL/TLS configuration for production
+const mongooseOptions = {
+  // Connection options for MongoDB Atlas
+  retryWrites: true,
+  w: 'majority',
+  // SSL/TLS options for Render deployment
+  ssl: true,
+  sslValidate: true,
+  sslCA: undefined, // Use system CA
+  // Connection timeout and retry options
+  serverSelectionTimeoutMS: 30000, // 30 seconds
+  connectTimeoutMS: 30000,
+  socketTimeoutMS: 30000,
+  maxPoolSize: 10,
+  minPoolSize: 1,
+  maxIdleTimeMS: 30000,
+  // Buffer commands while connecting
+  bufferCommands: false,
+  bufferMaxEntries: 0
+};
+
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator', mongooseOptions)
   .then(() => {
     console.log('Connected to MongoDB successfully');
+    console.log('Database connection established with SSL/TLS');
   })
   .catch((error) => {
     console.error('MongoDB connection error:', error);
     console.log('Please check your MONGODB_URI and ensure your MongoDB cluster is running');
+    console.log('For MongoDB Atlas, ensure your connection string includes retryWrites=true&w=majority');
   });
 
 // Set up PDF.js worker
@@ -127,7 +149,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker.en
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-domain.com'] // Replace with your actual domain
+    ? ['https://translatorassistant.com', 'https://www.translatorassistant.com']
     : ['http://localhost:3000', 'http://localhost:5000'],
   credentials: true
 }));
@@ -141,6 +163,7 @@ app.use(session({
   saveUninitialized: false,
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator',
+    mongoOptions: mongooseOptions, // Use same SSL options as main connection
     touchAfter: 24 * 3600 // lazy session update
   }),
   cookie: {

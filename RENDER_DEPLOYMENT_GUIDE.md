@@ -242,6 +242,30 @@ GCS_BUCKET=your-bucket-name
   3. Redeploy after adding variables
   4. Check logs for specific error messages
 
+#### MongoDB Connection Issues & SSL/TLS Errors
+- **Issue**: `MongoNetworkError: SSL routines:ssl3_read_bytes:tlsv1 alert internal error`
+- **Root Cause**: SSL/TLS handshake failure between Render and MongoDB Atlas
+- **Solutions**:
+  1. **Verify Connection String Format**:
+     ```
+     mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority
+     ```
+     - Must use `mongodb+srv://` (not `mongodb://`) for Atlas
+     - Include `retryWrites=true&w=majority` parameters
+     - Escape special characters in passwords (%, @, :, etc.)
+  2. **MongoDB Atlas Configuration**:
+     - **Network Access**: Add IP Address → `0.0.0.0/0` (allow all IPs)
+     - **Database User**: Ensure user has `readWrite` permissions
+     - **Cluster Version**: Use MongoDB 4.4+ (older versions may have SSL issues)
+     - **Cluster Status**: Ensure cluster is not paused
+  3. **Environment Variables**:
+     - `MONGODB_URI`: Full connection string with SSL parameters
+     - `SESSION_SECRET`: Strong random string (minimum 32 characters)
+  4. **Test Connection**:
+     - Verify connection string works locally first
+     - Check MongoDB Atlas logs for connection attempts
+     - Monitor Render deployment logs for specific error details
+
 #### File Upload Issues & Image Persistence
 - **Issue**: Saved translation images disappear after deployment/restart
 - **Root Cause**: Render's filesystem is ephemeral - files are wiped on restart/deployment
