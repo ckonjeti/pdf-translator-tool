@@ -124,6 +124,14 @@
 - Review MongoDB write permissions
 - Test API endpoints individually
 
+#### Image Persistence Issues
+- **Root Cause**: Render's ephemeral filesystem
+- **Symptom**: Images disappear after app restart/deployment
+- **Immediate Solutions**:
+  1. Store images as base64 in MongoDB (quick fix)
+  2. Integrate cloud storage (Cloudinary/AWS S3)
+- **Check**: `QUICK_IMAGE_FIX.md` for implementation details
+
 ## 📈 Performance Optimization
 
 ### **Recommended Settings**

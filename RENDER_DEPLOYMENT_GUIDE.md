@@ -186,6 +186,37 @@ If you prefer PostgreSQL over MongoDB:
 2. Update `models/` to use PostgreSQL/Sequelize instead of MongoDB/Mongoose
 3. Add connection string to environment variables
 
+### 4.4 Cloud Storage Integration (Recommended for Production)
+
+**For persistent image storage**, integrate cloud storage:
+
+#### Option 1: AWS S3 Integration
+```bash
+# Add to environment variables:
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+AWS_S3_BUCKET=your-sanskrit-translator-bucket
+AWS_REGION=us-east-1
+```
+
+#### Option 2: Cloudinary Integration (Easiest)
+```bash
+# Add to environment variables:
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+#### Option 3: Google Cloud Storage
+```bash
+# Add to environment variables:
+GOOGLE_CLOUD_PROJECT_ID=your_project_id
+GOOGLE_CLOUD_KEY_FILE=path_to_service_account_key.json
+GCS_BUCKET=your-bucket-name
+```
+
+⚠️ **Note**: Without cloud storage, saved translation images will be lost on app restarts/deployments.
+
 ## 🔧 Step 5: Troubleshooting
 
 ### Common Issues and Solutions
@@ -211,10 +242,19 @@ If you prefer PostgreSQL over MongoDB:
   3. Redeploy after adding variables
   4. Check logs for specific error messages
 
-#### File Upload Issues
-- **Issue**: Uploads folder not writable
-- **Solution**: Render's filesystem is ephemeral
-- **Recommendation**: Files are cleaned up automatically
+#### File Upload Issues & Image Persistence
+- **Issue**: Saved translation images disappear after deployment/restart
+- **Root Cause**: Render's filesystem is ephemeral - files are wiped on restart/deployment
+- **Current Limitation**: Images for saved translations will be lost on app restarts
+- **Solutions**:
+  1. **Cloud Storage Integration** (Recommended):
+     - Add AWS S3, Google Cloud Storage, or Cloudinary integration
+     - Store images permanently in cloud storage
+     - Update image paths to use cloud URLs
+  2. **Alternative**: Store images as base64 in MongoDB (increases database size)
+  3. **Temporary Fix**: Users need to re-upload and save after app restarts
+
+⚠️ **Important**: For production use, implement cloud storage integration for image persistence
 
 #### Performance Issues
 - **Monitor**: Use Render's metrics dashboard
@@ -302,6 +342,7 @@ Once deployed, verify these work:
 - [ ] **My Translations** page lists saved translations with page details
 - [ ] **Translation detail view** shows individual pages
 - [ ] **Edit functionality** works for both OCR text and translations
+- [ ] **Images display** in saved translations (⚠️ may be lost on app restart without cloud storage)
 
 **Technical:**
 - [ ] All pages and navigation work
