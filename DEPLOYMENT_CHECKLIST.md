@@ -107,11 +107,12 @@
 - Ensure Canvas compiles properly
 
 #### Database Connection Issues
-- **SSL/TLS Errors**: Updated server.js with proper SSL configuration for Render + MongoDB Atlas
+- **Compatibility Fix**: Removed incompatible MongoDB options (sslvalidate, buffercommands, buffermaxentries)
 - **Connection String**: Must use `mongodb+srv://` format with `retryWrites=true&w=majority`
 - **Network Access**: MongoDB Atlas → Network Access → 0.0.0.0/0 (allow all IPs)
 - **Database User**: Ensure `readWrite` permissions on target database
-- **Cluster Version**: Use MongoDB 4.4+ for better SSL compatibility
+- **Cluster Version**: Use MongoDB 4.4+ for better compatibility
+- **SSL Handling**: MongoDB Atlas handles SSL automatically, no manual configuration needed
 - **Test locally first**: Verify connection string works before deploying
 
 #### Authentication Problems

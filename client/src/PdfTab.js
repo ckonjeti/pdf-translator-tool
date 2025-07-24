@@ -37,6 +37,7 @@ function PdfTab({ label, uploadEndpoint }) {
   const [ocrPrompt, setOcrPrompt] = useState('');
   const [translationPrompt, setTranslationPrompt] = useState('');
   const socketRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   // Helper function to get absolute image URL for Safari compatibility
   const getAbsoluteImageUrl = (imagePath) => {
@@ -176,12 +177,24 @@ Translated text:`;
       });
     });
 
+    socketRef.current.on('operation-cancelled', () => {
+      console.log('Operation cancelled by server');
+      setLoading(false);
+      setCurrentProgress({ step: 0, total: 100, message: 'Operation cancelled' });
+    });
+
     socketRef.current.on('disconnect', () => {
       console.log('Disconnected from WebSocket server');
     });
 
     return () => {
+      // Cancel any ongoing requests when component unmounts
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
       if (socketRef.current) {
+        socketRef.current.emit('cancel-operation');
         socketRef.current.disconnect();
       }
     };
@@ -199,6 +212,17 @@ Translated text:`;
     if (file.type !== 'application/pdf') {
       setError('Please upload a PDF file');
       return;
+    }
+    
+    // Cancel any ongoing operations first
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Cancel any ongoing socket operations
+    if (socketRef.current) {
+      socketRef.current.emit('cancel-operation');
     }
     
     // Reset state
@@ -242,6 +266,14 @@ Translated text:`;
   const handleUpload = async () => {
     if (!selectedFile) return;
     
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+    
     setLoading(true);
     setError('');
     setSuccess('');
@@ -262,6 +294,7 @@ Translated text:`;
     try {
       const response = await axios.post(uploadEndpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        signal: abortControllerRef.current.signal,
       });
       if (response.data.success) {
         setSuccess(`Successfully uploaded and processed: ${response.data.originalName} (${response.data.pageCount} pages)`);
@@ -287,6 +320,12 @@ Translated text:`;
         setError(response.data.message || 'Processing failed.');
       }
     } catch (err) {
+      // Handle aborted requests
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
+        console.log('Upload cancelled by user');
+        setCurrentProgress({ step: 0, total: 100, message: 'Upload cancelled' });
+        return;
+      }
       setError(err.response?.data?.error || 'Failed to upload and process PDF');
       console.error('Upload error:', err);
     } finally {
@@ -296,6 +335,17 @@ Translated text:`;
   };
 
   const clearSelection = () => {
+    // Cancel any ongoing upload operation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Cancel any ongoing socket operations by emitting a cancel event
+    if (socketRef.current) {
+      socketRef.current.emit('cancel-operation');
+    }
+    
     setSelectedFile(null);
     setTotalPages(0);
     setPageRanges('');
@@ -311,6 +361,8 @@ Translated text:`;
     setOcrPrompt('');
     setTranslationPrompt('');
     setModalImagePath(null);
+    setLoading(false);
+    setCurrentProgress({ step: 0, total: 100, message: '' });
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

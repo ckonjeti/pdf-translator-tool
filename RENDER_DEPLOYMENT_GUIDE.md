@@ -243,8 +243,8 @@ GCS_BUCKET=your-bucket-name
   4. Check logs for specific error messages
 
 #### MongoDB Connection Issues & SSL/TLS Errors
-- **Issue**: `MongoNetworkError: SSL routines:ssl3_read_bytes:tlsv1 alert internal error`
-- **Root Cause**: SSL/TLS handshake failure between Render and MongoDB Atlas
+- **Issue**: `MongoNetworkError: SSL routines:ssl3_read_bytes:tlsv1 alert internal error` or `MongoParseError: options ... are not supported`
+- **Root Cause**: SSL/TLS handshake failure or incompatible connection options
 - **Solutions**:
   1. **Verify Connection String Format**:
      ```
@@ -259,9 +259,13 @@ GCS_BUCKET=your-bucket-name
      - **Cluster Version**: Use MongoDB 4.4+ (older versions may have SSL issues)
      - **Cluster Status**: Ensure cluster is not paused
   3. **Environment Variables**:
-     - `MONGODB_URI`: Full connection string with SSL parameters
+     - `MONGODB_URI`: Full connection string (SSL is handled automatically by Atlas)
      - `SESSION_SECRET`: Strong random string (minimum 32 characters)
-  4. **Test Connection**:
+  4. **Connection Options**: 
+     - Server uses minimal connection options to avoid compatibility issues
+     - SSL/TLS is handled automatically by MongoDB Atlas
+     - No need for manual SSL configuration in connection options
+  5. **Test Connection**:
      - Verify connection string works locally first
      - Check MongoDB Atlas logs for connection attempts
      - Monitor Render deployment logs for specific error details

@@ -113,23 +113,13 @@ if (!process.env.SESSION_SECRET) {
 
 // Connect to MongoDB with SSL/TLS configuration for production
 const mongooseOptions = {
-  // Connection options for MongoDB Atlas
-  retryWrites: true,
-  w: 'majority',
-  // SSL/TLS options for Render deployment
-  ssl: true,
-  sslValidate: true,
-  sslCA: undefined, // Use system CA
   // Connection timeout and retry options
   serverSelectionTimeoutMS: 30000, // 30 seconds
   connectTimeoutMS: 30000,
   socketTimeoutMS: 30000,
   maxPoolSize: 10,
   minPoolSize: 1,
-  maxIdleTimeMS: 30000,
-  // Buffer commands while connecting
-  bufferCommands: false,
-  bufferMaxEntries: 0
+  maxIdleTimeMS: 30000
 };
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator', mongooseOptions)
@@ -163,7 +153,6 @@ app.use(session({
   saveUninitialized: false,
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator',
-    mongoOptions: mongooseOptions, // Use same SSL options as main connection
     touchAfter: 24 * 3600 // lazy session update
   }),
   cookie: {
@@ -546,7 +535,7 @@ function analyzeGptResponse(extractedText, apiResponse) {
 }
 
 // GPT-4 Vision OCR function to extract text from images
-async function extractTextFromImages(imageObjects, language, sendProgress, customOcrPrompt = null) {
+async function extractTextFromImages(imageObjects, language, sendProgress, customOcrPrompt = null, checkCancellation = null) {
   try {
     console.log('Starting GPT-4 Vision OCR for language:', language);
     sendProgress(`Starting GPT-4 Vision text extraction for ${imageObjects.length} pages...`, 50, 100);
@@ -625,6 +614,11 @@ IMPORTANT CONTENT MASKING INSTRUCTIONS:
     const results = [];
     
     for (let i = 0; i < imageObjects.length; i++) {
+      // Check for cancellation before processing each image
+      if (checkCancellation) {
+        checkCancellation();
+      }
+      
       const imageObject = imageObjects[i];
       const { imagePath, pageNumber } = imageObject;
       const fullImagePath = path.join(__dirname, imagePath.replace('/uploads/', 'uploads/'));
@@ -1413,8 +1407,13 @@ Original response: ${extractedText}`;
 }
 
 // GPT translation function
-async function translateText(text, sourceLanguage, sendProgress, customTranslationPrompt = null) {
+async function translateText(text, sourceLanguage, sendProgress, customTranslationPrompt = null, checkCancellation = null) {
   try {
+    // Check for cancellation before starting translation
+    if (checkCancellation) {
+      checkCancellation();
+    }
+    
     console.log('Starting GPT translation for:', sourceLanguage);
     sendProgress(`Starting translation for ${sourceLanguage} text...`);
     
@@ -1683,9 +1682,30 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     console.log('Custom OCR prompt provided:', !!customOcrPrompt);
     console.log('Custom translation prompt provided:', !!customTranslationPrompt);
 
+    // Track cancellation state
+    let isCancelled = false;
+    const checkCancellation = () => {
+      if (isCancelled) {
+        throw new Error('Operation cancelled by user');
+      }
+    };
+
+    // Register this operation for cancellation
+    if (socketId) {
+      activeOperations.set(socketId, {
+        cancel: () => {
+          console.log(`Cancelling operation for socket ${socketId}`);
+          isCancelled = true;
+        }
+      });
+    }
+
     // Progress tracking function with WebSocket emission
     const progressUpdates = [];
     const sendProgress = (message, step = null, total = null) => {
+      // Check for cancellation before sending progress
+      checkCancellation();
+      
       const timestamp = new Date().toLocaleTimeString();
       const progressData = { timestamp, message, step, total };
       progressUpdates.push(progressData);
@@ -1775,7 +1795,10 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     
     // Extract text using OCR
     console.log('Starting OCR processing...');
-    const ocrResults = await extractTextFromImages(imageObjects, language, sendProgress, customOcrPrompt);
+    const ocrResults = await extractTextFromImages(imageObjects, language, sendProgress, customOcrPrompt, checkCancellation);
+    
+    // Check for cancellation before starting translation
+    checkCancellation();
     
     // Translate text using GPT (sequential processing)
     console.log('Starting translation processing...');
@@ -1783,10 +1806,13 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     const resultsWithTranslation = [];
     
     for (let i = 0; i < ocrResults.length; i++) {
+      // Check for cancellation before translating each page
+      checkCancellation();
+      
       const page = ocrResults[i];
       const progressPercent = Math.round(75 + (i / ocrResults.length) * 20); // 75-95% for translation
       sendProgress(`Translating page ${page.page}...`, progressPercent, 100);
-      const translation = await translateText(page.text, language, (msg) => sendProgress(msg, progressPercent, 100), customTranslationPrompt);
+      const translation = await translateText(page.text, language, (msg) => sendProgress(msg, progressPercent, 100), customTranslationPrompt, checkCancellation);
       resultsWithTranslation.push({
         ...page,
         translation: translation
@@ -1821,7 +1847,19 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({ error: 'Failed to process PDF: ' + error.message });
+    
+    // Handle cancellation differently
+    if (error.message === 'Operation cancelled by user') {
+      console.log('Operation was cancelled by user');
+      res.status(499).json({ error: 'Operation cancelled by user', cancelled: true });
+    } else {
+      res.status(500).json({ error: 'Failed to process PDF: ' + error.message });
+    }
+  } finally {
+    // Clean up the operation from active operations
+    if (socketId) {
+      activeOperations.delete(socketId);
+    }
   }
 });
 
@@ -1858,12 +1896,32 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
+// Store active operations for cancellation
+const activeOperations = new Map();
+
 // WebSocket connection handling
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
   
+  // Handle cancellation requests
+  socket.on('cancel-operation', () => {
+    console.log(`Cancellation requested for socket: ${socket.id}`);
+    const operation = activeOperations.get(socket.id);
+    if (operation && operation.cancel) {
+      operation.cancel();
+      activeOperations.delete(socket.id);
+      socket.emit('operation-cancelled');
+    }
+  });
+  
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
+    // Clean up any active operations for this socket
+    const operation = activeOperations.get(socket.id);
+    if (operation && operation.cancel) {
+      operation.cancel();
+      activeOperations.delete(socket.id);
+    }
   });
 });
 
