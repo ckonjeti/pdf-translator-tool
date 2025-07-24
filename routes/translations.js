@@ -148,6 +148,33 @@ router.delete('/:id', requireAuth, async (req, res) => {
       });
     }
 
+    // Clean up associated image files when translation is deleted
+    try {
+      const fs = require('fs-extra');
+      const path = require('path');
+      
+      // Remove the entire directory if it's a saved translation
+      const translationDir = path.join(__dirname, '..', 'uploads', 'saved', translation._id.toString());
+      if (await fs.pathExists(translationDir)) {
+        await fs.remove(translationDir);
+        console.log(`Cleaned up translation directory: ${translationDir}`);
+      } else {
+        // Fallback: clean up individual images
+        for (const page of translation.pages) {
+          if (page.imagePath) {
+            const imagePath = path.join(__dirname, '..', page.imagePath.replace('/uploads/', 'uploads/'));
+            if (await fs.pathExists(imagePath)) {
+              await fs.remove(imagePath);
+              console.log(`Cleaned up image: ${page.imagePath}`);
+            }
+          }
+        }
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to clean up images for deleted translation:', cleanupError.message);
+      // Don't fail the deletion if cleanup fails
+    }
+
     res.json({
       success: true,
       message: 'Translation deleted successfully'
@@ -236,18 +263,52 @@ router.post('/save', requireAuth, async (req, res) => {
     const userId = req.session.userId || req.userId;
     const userObjectId = new mongoose.Types.ObjectId(userId);
     
+    // Create permanent directory for saved translation images
+    const fs = require('fs-extra');
+    const path = require('path');
+    const translationId = new require('mongoose').Types.ObjectId();
+    const permanentDir = path.join(__dirname, '..', 'uploads', 'saved', translationId.toString());
+    await fs.ensureDir(permanentDir);
+    
+    // Copy images from temporary location to permanent location
+    const updatedPages = [];
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      let newImagePath = page.imagePath;
+      
+      if (page.imagePath) {
+        try {
+          const tempImagePath = path.join(__dirname, '..', page.imagePath.replace('/uploads/', 'uploads/'));
+          const fileName = `page_${page.page || page.pageNumber}.png`;
+          const permanentImagePath = path.join(permanentDir, fileName);
+          
+          if (await fs.pathExists(tempImagePath)) {
+            await fs.copy(tempImagePath, permanentImagePath);
+            newImagePath = `/uploads/saved/${translationId.toString()}/${fileName}`;
+            console.log(`Copied image to permanent location: ${newImagePath}`);
+          }
+        } catch (copyError) {
+          console.warn(`Failed to copy image for page ${page.page}:`, copyError.message);
+          // Keep original path if copy fails
+        }
+      }
+      
+      updatedPages.push({
+        pageNumber: page.page || page.pageNumber,
+        originalText: page.text || page.originalText,
+        translatedText: page.translation || page.translatedText,
+        imagePath: newImagePath
+      });
+    }
+    
     const newTranslation = new Translation({
+      _id: translationId,
       userId: userObjectId,
       originalFileName,
       language,
       fileSize: fileSize || 0,
       pageCount: pages.length,
-      pages: pages.map(page => ({
-        pageNumber: page.page || page.pageNumber,
-        originalText: page.text || page.originalText,
-        translatedText: page.translation || page.translatedText,
-        imagePath: page.imagePath
-      })),
+      pages: updatedPages,
       customOcrPrompt: customOcrPrompt || null,
       customTranslationPrompt: customTranslationPrompt || null
     });

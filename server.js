@@ -176,9 +176,10 @@ app.use('/uploads', (req, res, next) => {
   next();
 }, express.static(path.join(__dirname, 'uploads')));
 
-// Ensure uploads directory exists (only for temporary processing)
+// Ensure uploads directory exists (for temporary processing and saved translations)
 fs.ensureDirSync(path.join(__dirname, 'uploads'));
 fs.ensureDirSync(path.join(__dirname, 'uploads/images'));
+fs.ensureDirSync(path.join(__dirname, 'uploads/saved'));
 
 // Configure multer for file uploads (temporary storage)
 const storage = multer.diskStorage({
@@ -1673,12 +1674,28 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
       }
     };
     
-    // Clean old images from previous sessions (keep current session images for redo)
-    console.log('Cleaning old images from previous sessions...');
-    sendProgress('Cleaning up old files...');
+    // Clean old images from previous sessions (but preserve images from saved translations)
+    console.log('Cleaning old temporary images...');
+    sendProgress('Cleaning up old temporary files...');
     await fs.ensureDir(outputDir);
     
     try {
+      // Get all image paths from saved translations to preserve them
+      const savedTranslations = await Translation.find({}, 'pages.imagePath');
+      const savedImagePaths = new Set();
+      
+      savedTranslations.forEach(translation => {
+        translation.pages.forEach(page => {
+          if (page.imagePath) {
+            // Convert relative path to absolute for comparison
+            const imageName = path.basename(page.imagePath);
+            savedImagePaths.add(imageName);
+          }
+        });
+      });
+      
+      console.log(`Found ${savedImagePaths.size} images to preserve from saved translations`);
+      
       const files = await fs.readdir(outputDir);
       const now = Date.now();
       const maxAge = 1000 * 60 * 60; // 1 hour
@@ -1687,10 +1704,23 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
         const filePath = path.join(outputDir, file);
         try {
           const stats = await fs.stat(filePath);
-          // Remove files older than 1 hour
+          
+          // Skip directories (like 'saved' directory)
+          if (stats.isDirectory()) {
+            console.log(`Skipping directory: ${file}`);
+            continue;
+          }
+          
+          // Don't remove images that belong to saved translations
+          if (savedImagePaths.has(file)) {
+            console.log(`Preserving saved translation image: ${file}`);
+            continue;
+          }
+          
+          // Remove files older than 1 hour (only temporary files)
           if (now - stats.mtime.getTime() > maxAge) {
             await fs.remove(filePath);
-            console.log(`Removed old image: ${file}`);
+            console.log(`Removed old temporary image: ${file}`);
           }
         } catch (fileError) {
           console.log(`Error checking file ${file}:`, fileError.message);
