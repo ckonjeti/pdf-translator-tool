@@ -243,32 +243,53 @@ GCS_BUCKET=your-bucket-name
   4. Check logs for specific error messages
 
 #### MongoDB Connection Issues & SSL/TLS Errors
-- **Issue**: `MongoNetworkError: SSL routines:ssl3_read_bytes:tlsv1 alert internal error` or `MongoParseError: options ... are not supported`
-- **Root Cause**: SSL/TLS handshake failure or incompatible connection options
-- **Solutions**:
-  1. **Verify Connection String Format**:
+- **Issue**: `MongoNetworkError: SSL routines:ssl3_read_bytes:tlsv1 alert internal error` (SSL alert number 80)
+- **Root Cause**: SSL/TLS handshake failure between Render and MongoDB Atlas
+- **Updated Solutions** (Server now uses multiple connection strategies):
+
+  **1. MongoDB Atlas Network Access (MOST IMPORTANT)**:
      ```
-     mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority
+     Go to: https://cloud.mongodb.com/
+     → Your Project → Network Access → Add IP Address
+     → Add: 0.0.0.0/0 (Allow access from anywhere)
+     → Comment: "Render deployment access"
+     → Confirm
      ```
-     - Must use `mongodb+srv://` (not `mongodb://`) for Atlas
-     - Include `retryWrites=true&w=majority` parameters
-     - Escape special characters in passwords (%, @, :, etc.)
-  2. **MongoDB Atlas Configuration**:
-     - **Network Access**: Add IP Address → `0.0.0.0/0` (allow all IPs)
-     - **Database User**: Ensure user has `readWrite` permissions
-     - **Cluster Version**: Use MongoDB 4.4+ (older versions may have SSL issues)
-     - **Cluster Status**: Ensure cluster is not paused
-  3. **Environment Variables**:
-     - `MONGODB_URI`: Full connection string (SSL is handled automatically by Atlas)
-     - `SESSION_SECRET`: Strong random string (minimum 32 characters)
-  4. **Connection Options**: 
-     - Server uses minimal connection options to avoid compatibility issues
-     - SSL/TLS is handled automatically by MongoDB Atlas
-     - No need for manual SSL configuration in connection options
-  5. **Test Connection**:
-     - Verify connection string works locally first
-     - Check MongoDB Atlas logs for connection attempts
-     - Monitor Render deployment logs for specific error details
+
+  **2. Connection String Format**:
+     ```
+     mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority&ssl=true
+     ```
+     - **MUST use** `mongodb+srv://` (not `mongodb://`)
+     - **Required parameters**: `retryWrites=true&w=majority&ssl=true`
+     - **Password requirements**: No special characters (@, :, %, etc.)
+
+  **3. Database User Configuration**:
+     ```
+     MongoDB Atlas → Database Access → Add New Database User
+     → Authentication Method: Password
+     → User Privileges: Built-in Role → readWriteAnyDatabase
+     → Database User: Choose simple username (no special chars)
+     → Password: Generate secure password (no @, :, %, etc.)
+     ```
+
+  **4. Cluster Health Check**:
+     - **Status**: Ensure cluster is "Active" (not paused)
+     - **Version**: Use MongoDB 5.0+ for best compatibility
+     - **Region**: Same region as Render deployment (Oregon recommended)
+
+  **5. Environment Variables in Render**:
+     ```
+     MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/dbname?retryWrites=true&w=majority&ssl=true
+     SESSION_SECRET=your-32-character-random-string-here
+     NODE_ENV=production
+     ```
+
+  **6. Advanced Troubleshooting**:
+     - Server now tries 3 different connection strategies automatically
+     - Check Render logs for specific strategy that works
+     - If all fail, the issue is likely Network Access whitelist
+     - Connection timeout increased to 30 seconds for better reliability
 
 #### File Upload Issues & Image Persistence
 - **Issue**: Saved translation images disappear after deployment/restart

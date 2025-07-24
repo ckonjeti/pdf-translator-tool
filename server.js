@@ -119,19 +119,116 @@ const mongooseOptions = {
   socketTimeoutMS: 30000,
   maxPoolSize: 10,
   minPoolSize: 1,
-  maxIdleTimeMS: 30000
+  maxIdleTimeMS: 30000,
+  // Additional SSL/TLS troubleshooting options
+  tls: true,
+  tlsAllowInvalidCertificates: false,
+  tlsAllowInvalidHostnames: false,
+  // Retry configuration for better connection handling
+  retryWrites: true,
+  retryReads: true,
+  // Use newer server discovery and monitoring engine
+  useUnifiedTopology: true
 };
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator', mongooseOptions)
-  .then(() => {
-    console.log('Connected to MongoDB successfully');
-    console.log('Database connection established with SSL/TLS');
-  })
-  .catch((error) => {
-    console.error('MongoDB connection error:', error);
-    console.log('Please check your MONGODB_URI and ensure your MongoDB cluster is running');
-    console.log('For MongoDB Atlas, ensure your connection string includes retryWrites=true&w=majority');
-  });
+// Validate and enhance MongoDB URI
+let mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator';
+
+if (mongoUri.includes('mongodb.net')) {
+  console.log('🔍 DEBUG: Detected MongoDB Atlas connection');
+  
+  // Ensure proper query parameters for Atlas
+  if (!mongoUri.includes('retryWrites=true')) {
+    mongoUri += mongoUri.includes('?') ? '&retryWrites=true' : '?retryWrites=true';
+  }
+  if (!mongoUri.includes('w=majority')) {
+    mongoUri += '&w=majority';
+  }
+  if (!mongoUri.includes('ssl=true')) {
+    mongoUri += '&ssl=true';
+  }
+  
+  console.log('🔍 DEBUG: Enhanced MongoDB URI with Atlas-specific parameters');
+}
+
+// Attempt connection with fallback strategies
+async function connectToMongoDB() {
+  const strategies = [
+    {
+      name: 'Standard Atlas Connection',
+      options: mongooseOptions
+    },
+    {
+      name: 'Minimal SSL Options',
+      options: {
+        serverSelectionTimeoutMS: 30000,
+        connectTimeoutMS: 30000,
+        socketTimeoutMS: 30000,
+        tls: true,
+        retryWrites: true
+      }
+    },
+    {
+      name: 'Legacy SSL Configuration',
+      options: {
+        serverSelectionTimeoutMS: 30000,
+        connectTimeoutMS: 30000,
+        socketTimeoutMS: 30000,
+        useUnifiedTopology: true,
+        useNewUrlParser: true
+      }
+    }
+  ];
+
+  for (let i = 0; i < strategies.length; i++) {
+    const strategy = strategies[i];
+    console.log(`🔄 Attempting connection strategy ${i + 1}: ${strategy.name}`);
+    
+    try {
+      await mongoose.connect(mongoUri, strategy.options);
+      console.log(`✅ Connected to MongoDB successfully using: ${strategy.name}`);
+      console.log('🔒 Database connection established');
+      return;
+    } catch (error) {
+      console.log(`❌ Strategy ${i + 1} failed: ${error.message}`);
+      
+      if (i === strategies.length - 1) {
+        // This is the last strategy, provide comprehensive troubleshooting
+        console.error('\n🚨 ALL CONNECTION STRATEGIES FAILED');
+        console.log('\n💡 TROUBLESHOOTING STEPS:');
+        
+        if (error.message.includes('SSL') || error.message.includes('TLS')) {
+          console.log('\n🔒 SSL/TLS ERROR - Try these solutions:');
+          console.log('1. MongoDB Atlas Network Access:');
+          console.log('   → https://cloud.mongodb.com/');
+          console.log('   → Network Access → Add IP Address → 0.0.0.0/0');
+          console.log('\n2. Connection String Format:');
+          console.log('   → Must be: mongodb+srv://username:password@cluster.mongodb.net/database');
+          console.log('   → Include: ?retryWrites=true&w=majority');
+          console.log('\n3. Database User:');
+          console.log('   → Database Access → Add User → readWrite permissions');
+          console.log('   → Avoid special characters in password (@, :, %, etc.)');
+          console.log('\n4. Cluster Status:');
+          console.log('   → Ensure cluster is not paused');
+          console.log('   → Check cluster health in Atlas dashboard');
+        }
+        
+        console.log('\n📋 Debug Information:');
+        console.log('- Connection URI:', mongoUri.replace(/\/\/.*@/, '//<credentials>@'));
+        console.log('- Node.js version:', process.version);
+        console.log('- Environment:', process.env.NODE_ENV || 'development');
+        console.log('- Render deployment:', !!process.env.RENDER);
+        
+        // Continue without database for development
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('\n⚠️  Continuing without database (development mode)');
+        }
+      }
+    }
+  }
+}
+
+connectToMongoDB();
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker.entry');
@@ -1657,6 +1754,9 @@ app.post('/api/redo-ocr-translation', async (req, res) => {
 
 // Upload endpoint with OCR and translation (now with user authentication)
 app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => {
+  // Declare socketId outside try block to ensure it's accessible in finally
+  const socketId = req.body.socketId; // Get socket ID from request
+  
   try {
     console.log('Upload request received');
     
@@ -1672,7 +1772,6 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     
     const pageRanges = req.body.pageRanges;
     const pagesToProcess = parsePageRanges(pageRanges);
-    const socketId = req.body.socketId; // Get socket ID from request
     const customOcrPrompt = req.body.ocrPrompt; // Custom OCR prompt from user
     const customTranslationPrompt = req.body.translationPrompt; // Custom translation prompt from user
 

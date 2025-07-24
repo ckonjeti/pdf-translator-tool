@@ -58,6 +58,20 @@ router.get('/:id', requireAuth, async (req, res) => {
       });
     }
 
+    // Debug: Log what we're returning
+    console.log(`DEBUG: Returning translation ${req.params.id}:`, {
+      id: translation._id,
+      fileName: translation.originalFileName,
+      pageCount: translation.pageCount,
+      pages: translation.pages.map(p => ({
+        pageNumber: p.pageNumber,
+        hasOriginalText: !!p.originalText,
+        hasTranslatedText: !!p.translatedText,
+        imagePath: p.imagePath,
+        imagePathExists: p.imagePath ? 'YES' : 'NO'
+      }))
+    });
+
     res.json({
       success: true,
       translation
@@ -276,19 +290,38 @@ router.post('/save', requireAuth, async (req, res) => {
       const page = pages[i];
       let newImagePath = page.imagePath;
       
+      console.log(`DEBUG: Processing page ${i}:`, {
+        page: page.page,
+        pageNumber: page.pageNumber,
+        imagePath: page.imagePath,
+        hasText: !!page.text,
+        hasOriginalText: !!page.originalText,
+        hasTranslation: !!page.translation, 
+        hasTranslatedText: !!page.translatedText
+      });
+      
       if (page.imagePath) {
         try {
           const tempImagePath = path.join(__dirname, '..', page.imagePath.replace('/uploads/', 'uploads/'));
           const fileName = `page_${page.page || page.pageNumber}.png`;
           const permanentImagePath = path.join(permanentDir, fileName);
           
+          console.log(`DEBUG: Image paths for page ${page.page || page.pageNumber}:`, {
+            original: page.imagePath,
+            temp: tempImagePath,
+            permanent: permanentImagePath,
+            fileName: fileName
+          });
+          
           if (await fs.pathExists(tempImagePath)) {
             await fs.copy(tempImagePath, permanentImagePath);
             newImagePath = `/uploads/saved/${translationId.toString()}/${fileName}`;
-            console.log(`Copied image to permanent location: ${newImagePath}`);
+            console.log(`SUCCESS: Copied image to permanent location: ${newImagePath}`);
+          } else {
+            console.warn(`WARNING: Temp image not found: ${tempImagePath}`);
           }
         } catch (copyError) {
-          console.warn(`Failed to copy image for page ${page.page}:`, copyError.message);
+          console.warn(`Failed to copy image for page ${page.page || page.pageNumber}:`, copyError.message);
           // Keep original path if copy fails
         }
       }

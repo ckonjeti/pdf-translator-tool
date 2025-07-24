@@ -16,7 +16,8 @@
       "Bash(npm start)",
       "Bash(npm rebuild:*)",
       "Bash(sudo apt-get:*)",
-      "Bash(sudo apt-get install:*)"
+      "Bash(sudo apt-get install:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }

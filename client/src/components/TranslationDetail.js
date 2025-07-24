@@ -118,6 +118,27 @@ const TranslationDetail = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Helper function to get absolute image URL for Safari compatibility
+  const getAbsoluteImageUrl = (imagePath) => {
+    if (!imagePath) return '';
+    
+    // If already absolute URL, return as-is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    // Create absolute URL with proper protocol
+    const serverUrl = process.env.NODE_ENV === 'production' 
+      ? window.location.origin 
+      : 'http://localhost:5000';
+    
+    // Add cache-busting parameter to force fresh image loads
+    const cacheBuster = Date.now();
+    const separator = imagePath.includes('?') ? '&' : '?';
+    
+    return `${serverUrl}${imagePath}${separator}t=${cacheBuster}`;
+  };
+
   if (loading) {
     return (
       <div className="translation-detail-container">
@@ -181,19 +202,50 @@ const TranslationDetail = () => {
           <div key={index} className="page-section">
             <div className="page-header">
               <h2>Page {page.pageNumber}</h2>
-              {page.imagePath && (
-                <img 
-                  src={page.imagePath} 
-                  alt={`Page ${page.pageNumber}`}
-                  className="page-image"
-                />
-              )}
             </div>
             
-            <div className="text-sections">
-              <div className="text-section">
-                <div className="text-section-header">
-                  <h3>Original Text</h3>
+            <div className="three-column-layout">
+              {/* Left Column - Image */}
+              <div className="column image-column">
+                <div className="column-header">
+                  <h3>📄 Original Image</h3>
+                </div>
+                <div className="image-container">
+                  {page.imageData ? (
+                    <img 
+                      src={page.imageData} 
+                      alt={`Page ${page.pageNumber}`}
+                      className="page-image"
+                      onError={(e) => {
+                        console.log(`Failed to load imageData for page ${page.pageNumber}`);
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                  ) : page.imagePath ? (
+                    <img 
+                      src={getAbsoluteImageUrl(page.imagePath)} 
+                      alt={`Page ${page.pageNumber}`}
+                      className="page-image"
+                      onError={(e) => {
+                        console.log(`Failed to load imagePath for page ${page.pageNumber}: ${page.imagePath}`);
+                        console.log(`Attempted URL: ${getAbsoluteImageUrl(page.imagePath)}`);
+                        e.target.style.display = 'none';
+                        // Show fallback message
+                        e.target.parentNode.innerHTML = '<div class="no-image"><p>Image not found</p><small>' + page.imagePath + '</small></div>';
+                      }}
+                    />
+                  ) : (
+                    <div className="no-image">
+                      <p>No image available</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Middle Column - OCR Text */}
+              <div className="column ocr-column">
+                <div className="column-header">
+                  <h3>📝 OCR Text</h3>
                   <button 
                     onClick={() => startEditing(index, 'original')}
                     className="edit-btn"
@@ -202,41 +254,45 @@ const TranslationDetail = () => {
                     Edit OCR
                   </button>
                 </div>
-                {editingPage === index && editingField === 'original' ? (
-                  <div className="edit-container">
-                    <textarea
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="edit-textarea"
-                      rows={10}
-                    />
-                    <div className="edit-actions">
-                      <button 
-                        onClick={saveEdit} 
-                        className="save-btn"
-                        disabled={saving}
-                      >
-                        {saving ? 'Saving...' : 'Save'}
-                      </button>
-                      <button 
-                        onClick={cancelEditing} 
-                        className="cancel-btn"
-                        disabled={saving}
-                      >
-                        Cancel
-                      </button>
+                <div className="text-container">
+                  {editingPage === index && editingField === 'original' ? (
+                    <div className="edit-container">
+                      <textarea
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="edit-textarea"
+                        rows={15}
+                        placeholder="Enter OCR text..."
+                      />
+                      <div className="edit-actions">
+                        <button 
+                          onClick={saveEdit} 
+                          className="save-btn"
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button 
+                          onClick={cancelEditing} 
+                          className="cancel-btn"
+                          disabled={saving}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-content original-text">
-                    {page.originalText || 'No text extracted'}
-                  </div>
-                )}
+                  ) : (
+                    <div className="text-content original-text">
+                      {page.originalText || 'No text extracted'}
+                    </div>
+                  )}
+                </div>
               </div>
               
-              <div className="text-section">
-                <div className="text-section-header">
-                  <h3>Translation</h3>
+              {/* Right Column - Translation */}
+              <div className="column translation-column">
+                <div className="column-header">
+                  <h3>🌐 Translation</h3>
                   <button 
                     onClick={() => startEditing(index, 'translation')}
                     className="edit-btn"
@@ -245,36 +301,39 @@ const TranslationDetail = () => {
                     Edit Translation
                   </button>
                 </div>
-                {editingPage === index && editingField === 'translation' ? (
-                  <div className="edit-container">
-                    <textarea
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="edit-textarea"
-                      rows={10}
-                    />
-                    <div className="edit-actions">
-                      <button 
-                        onClick={saveEdit} 
-                        className="save-btn"
-                        disabled={saving}
-                      >
-                        {saving ? 'Saving...' : 'Save'}
-                      </button>
-                      <button 
-                        onClick={cancelEditing} 
-                        className="cancel-btn"
-                        disabled={saving}
-                      >
-                        Cancel
-                      </button>
+                <div className="text-container">
+                  {editingPage === index && editingField === 'translation' ? (
+                    <div className="edit-container">
+                      <textarea
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="edit-textarea"
+                        rows={15}
+                        placeholder="Enter translation..."
+                      />
+                      <div className="edit-actions">
+                        <button 
+                          onClick={saveEdit} 
+                          className="save-btn"
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button 
+                          onClick={cancelEditing} 
+                          className="cancel-btn"
+                          disabled={saving}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-content translated-text">
-                    {page.translatedText || 'No translation available'}
-                  </div>
-                )}
+                  ) : (
+                    <div className="text-content translated-text">
+                      {page.translatedText || 'No translation available'}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
