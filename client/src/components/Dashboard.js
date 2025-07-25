@@ -78,6 +78,25 @@ const Dashboard = () => {
       {error && (
         <div className="error-message">
           {error}
+          <button 
+            onClick={() => {
+              setError('');
+              fetchDashboardData();
+            }}
+            className="retry-button"
+            style={{
+              marginLeft: '10px',
+              padding: '5px 10px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            Retry
+          </button>
         </div>
       )}
 

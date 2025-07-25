@@ -1759,6 +1759,7 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
   
   try {
     console.log('Upload request received');
+    console.log('🔐 EARLY DEBUG: req.userId =', req.userId, '| req.session exists =', !!req.session);
     
     if (!req.file) {
       console.log('No file in request');
@@ -1766,6 +1767,11 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     }
 
     console.log('File received:', req.file.originalname, req.file.size, 'bytes');
+    console.log('🔐🔐🔐 AUTHENTICATION STATUS 🔐🔐🔐');
+    console.log('req.userId:', req.userId);
+    console.log('req.session exists:', !!req.session);
+    console.log('req.session.userId:', req.session?.userId);
+    console.log('🔐🔐🔐 END AUTH STATUS 🔐🔐🔐');
     
     const pdfPath = req.file.path;
     const outputDir = path.join(__dirname, 'uploads/images');
@@ -1941,7 +1947,76 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
     // Note: We keep the extracted images for potential redo operations
     // They will be cleaned up when a new upload session starts or by periodic cleanup
     
+    // Auto-save translation if user is logged in
+    let savedTranslationId = null;
+    console.log('Auto-save check - req.userId:', req.userId, 'req.session:', !!req.session, 'session.userId:', req.session?.userId);
+    if (req.userId) {
+      try {
+        console.log('Starting auto-save for user:', req.userId);
+        sendProgress('Auto-saving translation...', 95, 100);
+        
+        // Create permanent directory for saved translation images
+        const translationId = new mongoose.Types.ObjectId();
+        const permanentDir = path.join(__dirname, 'uploads', 'saved', translationId.toString());
+        await fs.ensureDir(permanentDir);
+        
+        // Copy images from temporary location to permanent location
+        const updatedPages = [];
+        for (let i = 0; i < resultsWithTranslation.length; i++) {
+          const result = resultsWithTranslation[i];
+          let newImagePath = result.imagePath;
+          
+          if (result.imagePath) {
+            try {
+              const tempImagePath = path.join(__dirname, result.imagePath.replace('/uploads/', 'uploads/'));
+              const fileName = `page_${result.page}.png`;
+              const permanentImagePath = path.join(permanentDir, fileName);
+              
+              if (await fs.pathExists(tempImagePath)) {
+                await fs.copy(tempImagePath, permanentImagePath);
+                newImagePath = `/uploads/saved/${translationId.toString()}/${fileName}`;
+                console.log(`Auto-save: Copied image to permanent location: ${newImagePath}`);
+              } else {
+                console.warn(`Auto-save: Temp image not found: ${tempImagePath}`);
+              }
+            } catch (copyError) {
+              console.warn(`Auto-save: Failed to copy image for page ${result.page}:`, copyError.message);
+            }
+          }
+          
+          updatedPages.push({
+            pageNumber: result.page,
+            originalText: result.text,
+            translatedText: result.translation,
+            imagePath: newImagePath
+          });
+        }
+        
+        // Save to database
+        const newTranslation = new Translation({
+          _id: translationId,
+          userId: new mongoose.Types.ObjectId(req.userId),
+          originalFileName: req.file.originalname,
+          language: language,
+          fileSize: req.file.size,
+          pageCount: imageObjects.length,
+          pages: updatedPages,
+          customOcrPrompt: customOcrPrompt || null,
+          customTranslationPrompt: customTranslationPrompt || null
+        });
+
+        await newTranslation.save();
+        savedTranslationId = translationId.toString();
+        console.log('Auto-save: Translation saved successfully with ID:', savedTranslationId);
+        sendProgress('Translation auto-saved successfully!', 98, 100);
+      } catch (autoSaveError) {
+        console.error('Auto-save failed:', autoSaveError);
+        sendProgress('Auto-save failed, but processing completed successfully', 98, 100);
+      }
+    }
+    
     console.log('Upload, OCR, and translation successful, returning response');
+    console.log('🔐 DEBUG: Authentication check - req.userId exists:', !!req.userId, 'Value:', req.userId);
     sendProgress('All processing completed successfully!', 100, 100);
     
     // Check if the response is still open before sending
@@ -1954,7 +2029,9 @@ app.post('/api/upload', optionalAuth, upload.single('pdf'), async (req, res) => 
         pageCount: imageObjects.length,
         progress: progressUpdates,
         language: language,
-        userLoggedIn: !!req.userId
+        userLoggedIn: !!req.userId,
+        autoSaved: !!savedTranslationId,
+        savedTranslationId: savedTranslationId
       });
     } else {
       console.log('Response already sent or client disconnected, but operation completed successfully');

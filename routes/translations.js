@@ -7,11 +7,13 @@ const router = express.Router();
 // Get user's translation history
 router.get('/', requireAuth, async (req, res) => {
   try {
+    console.log('📋 Translations list request - userId:', req.userId, 'session.userId:', req.session?.userId);
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
     const userId = req.session.userId || req.userId;
+    console.log('📋 Using userId for translations:', userId);
     const userObjectId = new mongoose.Types.ObjectId(userId);
     const translations = await Translation.find({ userId: userObjectId })
       .sort({ createdAt: -1 })
@@ -206,7 +208,9 @@ router.delete('/:id', requireAuth, async (req, res) => {
 // Get user statistics
 router.get('/stats/summary', requireAuth, async (req, res) => {
   try {
+    console.log('📊 Dashboard stats request - userId:', req.userId, 'session.userId:', req.session?.userId);
     const userId = req.session.userId || req.userId;
+    console.log('📊 Using userId for stats:', userId);
     const userObjectId = new mongoose.Types.ObjectId(userId);
     const stats = await Translation.aggregate([
       { $match: { userId: userObjectId } },

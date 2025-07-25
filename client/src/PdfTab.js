@@ -19,7 +19,6 @@ function PdfTab({ label, uploadEndpoint }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [translationData, setTranslationData] = useState(null);
   const [modalImagePath, setModalImagePath] = useState(null);
   const [totalPages, setTotalPages] = useState(0);
@@ -295,17 +294,20 @@ Translated text:`;
       const response = await axios.post(uploadEndpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         signal: abortControllerRef.current.signal,
+        withCredentials: true, // Ensure session cookies are sent
       });
       if (response.data.success) {
         setSuccess(`Successfully uploaded and processed: ${response.data.originalName} (${response.data.pageCount} pages)`);
         setOcrPages(response.data.pages || []);
         
-        // Store translation data for potential saving
+        // Store translation data with auto-save status
         setTranslationData({
           originalFileName: response.data.originalName,
           language: response.data.language,
           fileSize: response.data.fileSize,
-          pages: response.data.pages || []
+          pages: response.data.pages || [],
+          autoSaved: response.data.autoSaved || false,
+          savedTranslationId: response.data.savedTranslationId || null
         });
         
         const initialEditableTranslations = {};
@@ -547,53 +549,6 @@ Translated text:`;
     }
   };
 
-  const saveToAccount = async () => {
-    if (!isAuthenticated) {
-      setError('Please log in to save translations');
-      return;
-    }
-
-    if (!translationData) {
-      setError('No translation data to save');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError('');
-
-      // Get current edited translations and OCR text
-      const updatedPages = translationData.pages.map((page, index) => ({
-        page: page.page,
-        pageNumber: page.page,
-        originalText: editableTranslations[index]?.split('\n\nTranslation:\n')[0] || page.text,
-        translatedText: editableTranslationOnly[index] || page.translation,
-        imagePath: page.imagePath
-      }));
-
-      const saveData = {
-        originalFileName: translationData.originalFileName,
-        language: translationData.language,
-        fileSize: translationData.fileSize,
-        pages: updatedPages
-      };
-
-      const response = await axios.post('/api/translations/save', saveData);
-
-      if (response.data.success) {
-        setSuccess('Translation saved successfully!');
-        // Clear translation data since it's now saved
-        setTranslationData(null);
-      } else {
-        setError('Failed to save translation');
-      }
-    } catch (error) {
-      console.error('Save error:', error);
-      setError(error.response?.data?.message || 'Failed to save translation');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const redoOcrAndTranslation = async (pageIndex) => {
     if (!ocrPages[pageIndex]) return;
@@ -865,25 +820,26 @@ Translated text:`;
                 </button>
               ))}
             </div>
-            {isAuthenticated && translationData && (
-              <button 
-                onClick={saveToAccount} 
-                className="save-button"
-                disabled={saving}
-                style={{
-                  marginRight: '10px',
-                  padding: '8px 16px',
-                  backgroundColor: saving ? '#6c757d' : '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 'bold'
-                }}
-              >
-                {saving ? '💾 Saving...' : '💾 Save Translation'}
-              </button>
+            {translationData && (
+              <div style={{
+                marginRight: '10px',
+                padding: '8px 16px',
+                backgroundColor: translationData.autoSaved ? '#28a745' : (isAuthenticated ? '#ffc107' : '#6c757d'),
+                color: translationData.autoSaved ? 'white' : (isAuthenticated ? 'black' : 'white'),
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                display: 'inline-block'
+              }}>
+                {translationData.autoSaved ? 
+                  '✅ Auto-saved to My Translations' : 
+                  (isAuthenticated ? 
+                    '⚠️ Auto-save failed - check console' : 
+                    'ℹ️ Not saved (login required)'
+                  )
+                }
+              </div>
             )}
             <button onClick={exportTranslations} className="export-button">
               📄 Export Translations
