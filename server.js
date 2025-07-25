@@ -250,12 +250,14 @@ app.use(session({
   saveUninitialized: false,
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/sanskrit-translator',
-    touchAfter: 24 * 3600 // lazy session update
+    touchAfter: 24 * 3600, // lazy session update
+    ttl: 14 * 24 * 60 * 60 // 14 days session expiry
   }),
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    secure: process.env.NODE_ENV === 'production' && process.env.HTTPS_ENABLED === 'true', // Only require HTTPS if explicitly enabled
     httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax' // Better CSRF protection in production
   }
 }));
 

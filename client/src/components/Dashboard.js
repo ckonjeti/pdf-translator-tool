@@ -12,6 +12,8 @@ const Dashboard = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    console.log('🔍 Dashboard: Component mounted, user:', user);
+    console.log('🔍 Dashboard: Auth context - isAuthenticated:', !!user);
     fetchDashboardData();
   }, []);
 
@@ -19,17 +21,35 @@ const Dashboard = () => {
     try {
       setLoading(true);
       
+      console.log('🔍 Dashboard: Starting data fetch...');
+      console.log('🔍 Dashboard: axios.defaults.withCredentials:', axios.defaults.withCredentials);
+      
       // Fetch user statistics
-      const statsResponse = await axios.get('/api/translations/stats/summary');
+      console.log('🔍 Dashboard: Fetching stats...');
+      const statsResponse = await axios.get('/api/translations/stats/summary', {
+        withCredentials: true
+      });
+      console.log('🔍 Dashboard: Stats response:', statsResponse.status, statsResponse.data);
       setStats(statsResponse.data.stats);
       
       // Fetch recent translations
-      const translationsResponse = await axios.get('/api/translations?limit=5');
+      console.log('🔍 Dashboard: Fetching translations...');
+      const translationsResponse = await axios.get('/api/translations?limit=5', {
+        withCredentials: true
+      });
+      console.log('🔍 Dashboard: Translations response:', translationsResponse.status, translationsResponse.data);
       setTranslations(translationsResponse.data.translations);
       
+      console.log('🔍 Dashboard: Data fetch completed successfully');
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      setError('Failed to load dashboard data');
+      console.error('🔍 Dashboard: Failed to fetch dashboard data:', error);
+      console.error('🔍 Dashboard: Error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+      setError(`Failed to load dashboard data: ${error.response?.status || error.message}`);
     } finally {
       setLoading(false);
     }

@@ -47,6 +47,9 @@ router.post('/register', async (req, res) => {
     req.session.userName = user.name;
 
     console.log('User registered successfully:', user.email);
+    console.log('🔐 Registration session debug - userId set to:', req.session.userId);
+    console.log('🔐 Session ID:', req.sessionID);
+    console.log('🔐 Session store connected:', !!req.sessionStore);
 
     res.status(201).json({ 
       success: true,
@@ -105,6 +108,9 @@ router.post('/login', async (req, res) => {
     req.session.userName = user.name;
 
     console.log('User logged in successfully:', user.email);
+    console.log('🔐 Login session debug - userId set to:', req.session.userId);
+    console.log('🔐 Session ID:', req.sessionID);
+    console.log('🔐 Session store connected:', !!req.sessionStore);
 
     res.json({ 
       success: true,
