@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { getAbsoluteImageUrl } from '../utils/imageUtils';
 import './TranslationDetail.css';
 
 const TranslationDetail = () => {
@@ -118,26 +119,6 @@ const TranslationDetail = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Helper function to get absolute image URL for Safari compatibility
-  const getAbsoluteImageUrl = (imagePath) => {
-    if (!imagePath) return '';
-    
-    // If already absolute URL, return as-is
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
-    }
-    
-    // Create absolute URL with proper protocol
-    const serverUrl = process.env.NODE_ENV === 'production' 
-      ? window.location.origin 
-      : 'http://localhost:5000';
-    
-    // Add cache-busting parameter to force fresh image loads
-    const cacheBuster = Date.now();
-    const separator = imagePath.includes('?') ? '&' : '?';
-    
-    return `${serverUrl}${imagePath}${separator}t=${cacheBuster}`;
-  };
 
   if (loading) {
     return (

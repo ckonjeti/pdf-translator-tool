@@ -6,6 +6,7 @@ import io from 'socket.io-client';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
 import { useAuth } from './AuthContext';
+import { getAbsoluteImageUrl } from './utils/imageUtils';
 
 // Set up PDF.js worker - use webpack-friendly approach
 if (typeof window !== 'undefined') {
@@ -38,26 +39,6 @@ function PdfTab({ label, uploadEndpoint }) {
   const socketRef = useRef(null);
   const abortControllerRef = useRef(null);
 
-  // Helper function to get absolute image URL for Safari compatibility
-  const getAbsoluteImageUrl = (imagePath) => {
-    if (!imagePath) return '';
-    
-    // If already absolute URL, return as-is
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
-    }
-    
-    // Create absolute URL with proper protocol
-    const serverUrl = process.env.NODE_ENV === 'production' 
-      ? window.location.origin 
-      : 'http://localhost:5000';
-    
-    // Add cache-busting parameter to force fresh image loads
-    const cacheBuster = Date.now();
-    const separator = imagePath.includes('?') ? '&' : '?';
-    
-    return `${serverUrl}${imagePath}${separator}t=${cacheBuster}`;
-  };
 
   // Default prompts based on language
   const getDefaultOcrPrompt = (language) => {
@@ -796,54 +777,338 @@ Translated text:`;
 
       {ocrPages.length > 0 && (
         <div className="results-section">
-          <div className="results-header">
-            <h3>Translation Results ({ocrPages.length} pages)</h3>
-            <div className="page-navigation">
-              {ocrPages.map((_, index) => (
+          <div className="results-header" style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '20px',
+            marginBottom: '30px',
+            padding: '20px',
+            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+            borderRadius: '12px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{
+              margin: '0',
+              fontSize: '1.5rem',
+              fontWeight: '600',
+              color: '#2c3e50',
+              textAlign: 'center'
+            }}>
+              Translation Results ({ocrPages.length} pages)
+            </h3>
+            
+            {/* Enhanced Page Navigation with Arrow Controls and Jump-to-Page */}
+            <div className="page-navigation" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '15px',
+              padding: '20px',
+              background: 'rgba(255,255,255,0.7)',
+              borderRadius: '20px',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255,255,255,0.3)'
+            }}>
+              
+              {/* Navigation Controls Row */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '15px',
+                flexWrap: 'wrap',
+                justifyContent: 'center'
+              }}>
+                
+                {/* Previous Page Arrow */}
                 <button
-                  key={index}
-                  onClick={() => setCurrentPageIndex(index)}
+                  onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
+                  disabled={currentPageIndex === 0}
                   style={{
-                    margin: '0 2px',
-                    padding: '5px 8px',
-                    background: currentPageIndex === index ? '#007bff' : '#f8f9fa',
-                    color: currentPageIndex === index ? 'white' : '#495057',
-                    border: '1px solid #dee2e6',
-                    borderRadius: '15px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: currentPageIndex === index ? 'bold' : 'normal',
-                    minWidth: '30px'
+                    padding: '12px 16px',
+                    background: currentPageIndex === 0 
+                      ? 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)' 
+                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: currentPageIndex === 0 ? '#6c757d' : 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    cursor: currentPageIndex === 0 ? 'not-allowed' : 'pointer',
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    minWidth: '50px',
+                    minHeight: '45px',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: currentPageIndex === 0 
+                      ? '0 2px 8px rgba(0,0,0,0.1)' 
+                      : '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)',
+                    transform: currentPageIndex === 0 ? 'scale(0.95)' : 'scale(1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (currentPageIndex !== 0) {
+                      e.target.style.transform = 'translateY(-2px) scale(1.05)';
+                      e.target.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.4), 0 5px 15px rgba(0,0,0,0.2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (currentPageIndex !== 0) {
+                      e.target.style.transform = 'scale(1)';
+                      e.target.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)';
+                    }
                   }}
                 >
-                  {index + 1}
+                  ←
                 </button>
-              ))}
-            </div>
-            {translationData && (
-              <div style={{
-                marginRight: '10px',
-                padding: '8px 16px',
-                backgroundColor: translationData.autoSaved ? '#28a745' : (isAuthenticated ? '#ffc107' : '#6c757d'),
-                color: translationData.autoSaved ? 'white' : (isAuthenticated ? 'black' : 'white'),
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                display: 'inline-block'
-              }}>
-                {translationData.autoSaved ? 
-                  '✅ Auto-saved to My Translations' : 
-                  (isAuthenticated ? 
-                    '⚠️ Auto-save failed - check console' : 
-                    'ℹ️ Not saved (login required)'
-                  )
-                }
+
+                {/* Page Info and Jump-to-Page Input */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: 'rgba(255,255,255,0.9)',
+                  padding: '8px 16px',
+                  borderRadius: '25px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  backdropFilter: 'blur(5px)'
+                }}>
+                  <span style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#495057',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    Page
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={ocrPages.length}
+                    value={currentPageIndex + 1}
+                    onChange={(e) => {
+                      const pageNum = parseInt(e.target.value);
+                      if (pageNum >= 1 && pageNum <= ocrPages.length) {
+                        setCurrentPageIndex(pageNum - 1);
+                      }
+                    }}
+                    style={{
+                      width: '60px',
+                      padding: '6px 8px',
+                      border: '2px solid #e9ecef',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      textAlign: 'center',
+                      background: 'white',
+                      color: '#495057',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#667eea';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#e9ecef';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                  <span style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#495057',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    of {ocrPages.length}
+                  </span>
+                </div>
+
+                {/* Next Page Arrow */}
+                <button
+                  onClick={() => setCurrentPageIndex(Math.min(ocrPages.length - 1, currentPageIndex + 1))}
+                  disabled={currentPageIndex === ocrPages.length - 1}
+                  style={{
+                    padding: '12px 16px',
+                    background: currentPageIndex === ocrPages.length - 1 
+                      ? 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)' 
+                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: currentPageIndex === ocrPages.length - 1 ? '#6c757d' : 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    cursor: currentPageIndex === ocrPages.length - 1 ? 'not-allowed' : 'pointer',
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    minWidth: '50px',
+                    minHeight: '45px',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: currentPageIndex === ocrPages.length - 1 
+                      ? '0 2px 8px rgba(0,0,0,0.1)' 
+                      : '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)',
+                    transform: currentPageIndex === ocrPages.length - 1 ? 'scale(0.95)' : 'scale(1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (currentPageIndex !== ocrPages.length - 1) {
+                      e.target.style.transform = 'translateY(-2px) scale(1.05)';
+                      e.target.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.4), 0 5px 15px rgba(0,0,0,0.2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (currentPageIndex !== ocrPages.length - 1) {
+                      e.target.style.transform = 'scale(1)';
+                      e.target.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)';
+                    }
+                  }}
+                >
+                  →
+                </button>
               </div>
-            )}
-            <button onClick={exportTranslations} className="export-button">
-              📄 Export Translations
-            </button>
+
+              {/* Page Number Buttons Row (show only if more than 1 page) */}
+              {ocrPages.length > 1 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  maxWidth: '100%',
+                  overflow: 'auto'
+                }}>
+                  {ocrPages.slice(0, 10).map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentPageIndex(index)}
+                      style={{
+                        position: 'relative',
+                        padding: '8px 12px',
+                        background: currentPageIndex === index 
+                          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+                          : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+                        color: currentPageIndex === index ? 'white' : '#495057',
+                        border: currentPageIndex === index ? 'none' : '1px solid #e9ecef',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        minWidth: '35px',
+                        minHeight: '35px',
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: currentPageIndex === index 
+                          ? '0 4px 15px rgba(102, 126, 234, 0.3)'
+                          : '0 1px 4px rgba(0,0,0,0.1)',
+                        transform: currentPageIndex === index ? 'scale(1.1)' : 'scale(1)',
+                        overflow: 'hidden'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (currentPageIndex !== index) {
+                          e.target.style.transform = 'scale(1.05)';
+                          e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (currentPageIndex !== index) {
+                          e.target.style.transform = 'scale(1)';
+                          e.target.style.boxShadow = '0 1px 4px rgba(0,0,0,0.1)';
+                        }
+                      }}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                  {ocrPages.length > 10 && (
+                    <span style={{
+                      padding: '8px 12px',
+                      color: '#6c757d',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
+                      ...
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons Row */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: '15px',
+              flexWrap: 'wrap'
+            }}>
+              {translationData && (
+                <div style={{
+                  padding: '12px 20px',
+                  backgroundColor: translationData.autoSaved ? '#10b981' : (isAuthenticated ? '#f59e0b' : '#6b7280'),
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '25px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                  backdropFilter: 'blur(10px)'
+                }}>
+                  {translationData.autoSaved ? 
+                    '✅ Auto-saved to My Translations' : 
+                    (isAuthenticated ? 
+                      '⚠️ Auto-save failed - check console' : 
+                      'ℹ️ Not saved (login required)'
+                    )
+                  }
+                </div>
+              )}
+              
+              <button 
+                onClick={exportTranslations} 
+                style={{
+                  position: 'relative',
+                  padding: '14px 28px',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '25px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 8px 25px rgba(16, 185, 129, 0.3), 0 3px 6px rgba(0,0,0,0.1)',
+                  overflow: 'hidden'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'translateY(-2px) scale(1.05)';
+                  e.target.style.boxShadow = '0 12px 35px rgba(16, 185, 129, 0.4), 0 5px 15px rgba(0,0,0,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0) scale(1)';
+                  e.target.style.boxShadow = '0 8px 25px rgba(16, 185, 129, 0.3), 0 3px 6px rgba(0,0,0,0.1)';
+                }}
+              >
+                <span style={{
+                  fontSize: '18px',
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))'
+                }}>📄</span>
+                Export Translations
+                <div style={{
+                  position: 'absolute',
+                  top: '0',
+                  left: '-100%',
+                  width: '100%',
+                  height: '100%',
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                  transition: 'left 0.6s ease-in-out'
+                }} />
+              </button>
+            </div>
           </div>
           
           {ocrPages[currentPageIndex] && (

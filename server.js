@@ -269,20 +269,27 @@ app.use('/api/auth', authRoutes);
 // Translation history routes
 app.use('/api/translations', translationRoutes);
 
-// Enhanced static serving for uploads with Safari-compatible CORS headers
+// Enhanced static serving for uploads with cross-device and cross-domain support
 app.use('/uploads', (req, res, next) => {
-  // Set Safari-compatible CORS headers for images
+  // Set CORS headers for cross-device access
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Range');
   res.setHeader('Access-Control-Allow-Credentials', 'false');
   
-  // Safari-specific headers for image loading
+  // Cross-origin policy headers for better browser compatibility
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
   
-  // Cache control for better performance
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  // Cache control for better performance across devices
+  res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours cache
+  res.setHeader('Vary', 'Accept-Encoding');
+  
+  // Support for range requests (better for mobile devices)
+  res.setHeader('Accept-Ranges', 'bytes');
+  
+  // Additional headers for better mobile support
+  res.setHeader('Content-Disposition', 'inline');
   
   next();
 }, express.static(path.join(__dirname, 'uploads')));
