@@ -7,6 +7,7 @@ import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
 import { useAuth } from './AuthContext';
 import { getAbsoluteImageUrl } from './utils/imageUtils';
+import './components/PdfTab.css';
 
 // Set up PDF.js worker - use webpack-friendly approach
 if (typeof window !== 'undefined') {
@@ -606,130 +607,65 @@ Translated text:`;
                   onChange={(e) => setPageRanges(e.target.value)}
                 />
                 
+                {/* Prompt Editor Toggle */}
+                <div style={{ margin: 'var(--space-md) 0' }}>
+                  <button 
+                    onClick={() => setShowPromptEditor(!showPromptEditor)}
+                    className="prompt-editor-toggle"
+                    style={{ margin: 0 }}
+                  >
+                    {showPromptEditor ? 'Hide' : 'Show'} AI Prompts Configuration
+                  </button>
+                </div>
+                
                 {/* Prompt Editor Section */}
                 {showPromptEditor && (
-                  <div style={{
-                    margin: '20px 0',
-                    padding: '20px',
-                    background: '#f8f9fa',
-                    borderRadius: '10px',
-                    border: '1px solid #e9ecef'
-                  }}>
-                    <h5 style={{ 
-                      margin: '0 0 15px 0',
-                      color: '#495057',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
+                  <div className="prompt-editor">
+                    <h5 className="prompt-editor-header">
                       🎯 AI Prompts Configuration
-                      <button 
-                        onClick={() => setShowPromptEditor(!showPromptEditor)}
-                        style={{
-                          background: '#6c757d',
-                          color: 'white',
-                          border: 'none',
-                          padding: '5px 10px',
-                          borderRadius: '5px',
-                          cursor: 'pointer',
-                          fontSize: '12px'
-                        }}
-                      >
-                        {showPromptEditor ? 'Hide' : 'Show'}
-                      </button>
                     </h5>
                     
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div className="prompt-editor-content">
                       {/* OCR Prompt Editor */}
-                      <div>
-                        <label style={{ 
-                          display: 'block', 
-                          marginBottom: '8px', 
-                          fontWeight: 'bold',
-                          color: '#495057'
-                        }}>
+                      <div className="prompt-field">
+                        <label className="prompt-label">
                           📄 Text Extraction (OCR) Prompt:
                         </label>
                         <textarea
                           value={ocrPrompt}
                           onChange={(e) => setOcrPrompt(e.target.value)}
-                          style={{
-                            width: '100%',
-                            height: '120px',
-                            padding: '10px',
-                            border: '1px solid #ced4da',
-                            borderRadius: '5px',
-                            fontSize: '13px',
-                            fontFamily: 'monospace',
-                            resize: 'vertical',
-                            background: 'white'
-                          }}
+                          className="prompt-textarea"
                           placeholder="Enter the prompt for GPT-4 Vision text extraction..."
                         />
                       </div>
                       
                       {/* Translation Prompt Editor */}
-                      <div>
-                        <label style={{ 
-                          display: 'block', 
-                          marginBottom: '8px', 
-                          fontWeight: 'bold',
-                          color: '#495057'
-                        }}>
+                      <div className="prompt-field">
+                        <label className="prompt-label">
                           📝 Translation Prompt:
                         </label>
                         <textarea
                           value={translationPrompt}
                           onChange={(e) => setTranslationPrompt(e.target.value)}
-                          style={{
-                            width: '100%',
-                            height: '120px',
-                            padding: '10px',
-                            border: '1px solid #ced4da',
-                            borderRadius: '5px',
-                            fontSize: '13px',
-                            fontFamily: 'monospace',
-                            resize: 'vertical',
-                            background: 'white'
-                          }}
+                          className="prompt-textarea"
                           placeholder="Enter the prompt for GPT-4 translation..."
                         />
-                        <div style={{ 
-                          fontSize: '12px', 
-                          color: '#6c757d', 
-                          marginTop: '5px' 
-                        }}>
+                        <div className="prompt-note">
                           Note: Use {'{TEXT}'} as a placeholder where the extracted text will be inserted.
                         </div>
                       </div>
                       
                       {/* Reset Buttons */}
-                      <div style={{ display: 'flex', gap: '10px' }}>
+                      <div className="prompt-buttons">
                         <button
                           onClick={() => setOcrPrompt(getDefaultOcrPrompt(label.toLowerCase()))}
-                          style={{
-                            background: '#17a2b8',
-                            color: 'white',
-                            border: 'none',
-                            padding: '8px 15px',
-                            borderRadius: '5px',
-                            cursor: 'pointer',
-                            fontSize: '13px'
-                          }}
+                          className="prompt-reset-button"
                         >
                           Reset OCR Prompt
                         </button>
                         <button
                           onClick={() => setTranslationPrompt(getDefaultTranslationPrompt(label.toLowerCase()))}
-                          style={{
-                            background: '#17a2b8',
-                            color: 'white',
-                            border: 'none',
-                            padding: '8px 15px',
-                            borderRadius: '5px',
-                            cursor: 'pointer',
-                            fontSize: '13px'
-                          }}
+                          className="prompt-reset-button"
                         >
                           Reset Translation Prompt
                         </button>
@@ -777,110 +713,29 @@ Translated text:`;
 
       {ocrPages.length > 0 && (
         <div className="results-section">
-          <div className="results-header" style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '20px',
-            marginBottom: '30px',
-            padding: '20px',
-            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-            borderRadius: '12px',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-          }}>
-            <h3 style={{
-              margin: '0',
-              fontSize: '1.5rem',
-              fontWeight: '600',
-              color: '#2c3e50',
-              textAlign: 'center'
-            }}>
+          <div className="results-header">
+            <h3>
               Translation Results ({ocrPages.length} pages)
             </h3>
             
             {/* Enhanced Page Navigation with Arrow Controls and Jump-to-Page */}
-            <div className="page-navigation" style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '15px',
-              padding: '20px',
-              background: 'rgba(255,255,255,0.7)',
-              borderRadius: '20px',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255,255,255,0.3)'
-            }}>
+            <div className="page-navigation">
               
               {/* Navigation Controls Row */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '15px',
-                flexWrap: 'wrap',
-                justifyContent: 'center'
-              }}>
+              <div className="page-navigation-controls">
                 
                 {/* Previous Page Arrow */}
                 <button
                   onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
                   disabled={currentPageIndex === 0}
-                  style={{
-                    padding: '12px 16px',
-                    background: currentPageIndex === 0 
-                      ? 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)' 
-                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: currentPageIndex === 0 ? '#6c757d' : 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    cursor: currentPageIndex === 0 ? 'not-allowed' : 'pointer',
-                    fontSize: '18px',
-                    fontWeight: '600',
-                    minWidth: '50px',
-                    minHeight: '45px',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: currentPageIndex === 0 
-                      ? '0 2px 8px rgba(0,0,0,0.1)' 
-                      : '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)',
-                    transform: currentPageIndex === 0 ? 'scale(0.95)' : 'scale(1)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (currentPageIndex !== 0) {
-                      e.target.style.transform = 'translateY(-2px) scale(1.05)';
-                      e.target.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.4), 0 5px 15px rgba(0,0,0,0.2)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (currentPageIndex !== 0) {
-                      e.target.style.transform = 'scale(1)';
-                      e.target.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)';
-                    }
-                  }}
+                  className="nav-arrow"
                 >
                   ←
                 </button>
 
                 {/* Page Info and Jump-to-Page Input */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  background: 'rgba(255,255,255,0.9)',
-                  padding: '8px 16px',
-                  borderRadius: '25px',
-                  border: '2px solid rgba(102, 126, 234, 0.2)',
-                  backdropFilter: 'blur(5px)'
-                }}>
-                  <span style={{
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#495057',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    Page
-                  </span>
+                <div className="page-info">
+                  <span>Page</span>
                   <input
                     type="number"
                     min="1"
@@ -892,75 +747,16 @@ Translated text:`;
                         setCurrentPageIndex(pageNum - 1);
                       }
                     }}
-                    style={{
-                      width: '60px',
-                      padding: '6px 8px',
-                      border: '2px solid #e9ecef',
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      textAlign: 'center',
-                      background: 'white',
-                      color: '#495057',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#667eea';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#e9ecef';
-                      e.target.style.boxShadow = 'none';
-                    }}
+                    className="page-input-nav"
                   />
-                  <span style={{
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#495057',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    of {ocrPages.length}
-                  </span>
+                  <span>of {ocrPages.length}</span>
                 </div>
 
                 {/* Next Page Arrow */}
                 <button
                   onClick={() => setCurrentPageIndex(Math.min(ocrPages.length - 1, currentPageIndex + 1))}
                   disabled={currentPageIndex === ocrPages.length - 1}
-                  style={{
-                    padding: '12px 16px',
-                    background: currentPageIndex === ocrPages.length - 1 
-                      ? 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)' 
-                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: currentPageIndex === ocrPages.length - 1 ? '#6c757d' : 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    cursor: currentPageIndex === ocrPages.length - 1 ? 'not-allowed' : 'pointer',
-                    fontSize: '18px',
-                    fontWeight: '600',
-                    minWidth: '50px',
-                    minHeight: '45px',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: currentPageIndex === ocrPages.length - 1 
-                      ? '0 2px 8px rgba(0,0,0,0.1)' 
-                      : '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)',
-                    transform: currentPageIndex === ocrPages.length - 1 ? 'scale(0.95)' : 'scale(1)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (currentPageIndex !== ocrPages.length - 1) {
-                      e.target.style.transform = 'translateY(-2px) scale(1.05)';
-                      e.target.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.4), 0 5px 15px rgba(0,0,0,0.2)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (currentPageIndex !== ocrPages.length - 1) {
-                      e.target.style.transform = 'scale(1)';
-                      e.target.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.3), 0 3px 6px rgba(0,0,0,0.1)';
-                    }
-                  }}
+                  className="nav-arrow"
                 >
                   →
                 </button>
@@ -1032,28 +828,11 @@ Translated text:`;
               )}
             </div>
 
-            {/* Action Buttons Row */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: '15px',
-              flexWrap: 'wrap'
-            }}>
+            {/* Export Actions Row */}
+            <div className="export-actions">
               {translationData && (
-                <div style={{
-                  padding: '12px 20px',
-                  backgroundColor: translationData.autoSaved ? '#10b981' : (isAuthenticated ? '#f59e0b' : '#6b7280'),
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '25px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                  backdropFilter: 'blur(10px)'
+                <div className="status-badge" style={{
+                  backgroundColor: translationData.autoSaved ? '#10b981' : (isAuthenticated ? '#f59e0b' : '#6b7280')
                 }}>
                   {translationData.autoSaved ? 
                     '✅ Auto-saved to My Translations' : 
@@ -1067,46 +846,9 @@ Translated text:`;
               
               <button 
                 onClick={exportTranslations} 
-                style={{
-                  position: 'relative',
-                  padding: '14px 28px',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '25px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: '0 8px 25px rgba(16, 185, 129, 0.3), 0 3px 6px rgba(0,0,0,0.1)',
-                  overflow: 'hidden'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-2px) scale(1.05)';
-                  e.target.style.boxShadow = '0 12px 35px rgba(16, 185, 129, 0.4), 0 5px 15px rgba(0,0,0,0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0) scale(1)';
-                  e.target.style.boxShadow = '0 8px 25px rgba(16, 185, 129, 0.3), 0 3px 6px rgba(0,0,0,0.1)';
-                }}
+                className="export-button"
               >
-                <span style={{
-                  fontSize: '18px',
-                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))'
-                }}>📄</span>
                 Export Translations
-                <div style={{
-                  position: 'absolute',
-                  top: '0',
-                  left: '-100%',
-                  width: '100%',
-                  height: '100%',
-                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
-                  transition: 'left 0.6s ease-in-out'
-                }} />
               </button>
             </div>
           </div>
